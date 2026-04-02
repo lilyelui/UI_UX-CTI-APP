@@ -113,38 +113,92 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
     }
   };
 
-  const handleUnifiedAnalysis = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setAnalysisResult(null);
+ const handleUnifiedAnalysis = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setAnalysisResult(null);
 
-    const type = detectInputType(analysisValue);
-    if (type === "unknown") {
-      toast.error(
-        "Unable to detect input type. Please check your input format."
-      );
-      setLoading(false);
-      return;
+  const type = detectInputType(analysisValue);
+  if (type === "unknown") {
+    toast.error(
+      "Unable to detect input type. Please check your input format."
+    );
+    setLoading(false);
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  try {
+    // ✅ KEEP MOCK (this preserves ALL your UI)
+    const mockResult = generateMockAnalysisResult(analysisValue, type);
+
+    let finalResult = { ...mockResult };
+
+    // 🛡 ONLY replace AbuseIPDB if IP
+    if (type === "ip") {
+      try {
+        const abuseRes = await fetch("http://localhost:5000/check-ip", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ip: analysisValue,
+          }),
+        });
+
+        const rawAbuse = await abuseRes.json();
+
+        console.log("REAL ABUSE:", rawAbuse);
+
+        // ✅ overwrite ONLY abuseData
+       const normalizedAbuse = rawAbuse?.data || rawAbuse || {};
+
+finalResult.abuseData = {
+  data: {
+    ipAddress: normalizedAbuse.ipAddress ?? analysisValue,
+    isPublic: normalizedAbuse.isPublic ?? true,
+    ipVersion: normalizedAbuse.ipVersion ?? 4,
+    isWhitelisted: normalizedAbuse.isWhitelisted ?? false,
+
+    abuseConfidenceScore:
+      normalizedAbuse.abuseConfidenceScore ?? normalizedAbuse.score ?? 0,
+
+    countryCode:
+      normalizedAbuse.countryCode ?? normalizedAbuse.country ?? "N/A",
+
+    countryName: normalizedAbuse.countryName ?? "Unknown",
+    usageType: normalizedAbuse.usageType ?? "Unknown",
+
+    isp: normalizedAbuse.isp ?? "N/A",
+    domain: normalizedAbuse.domain ?? "N/A",
+
+    totalReports:
+      normalizedAbuse.totalReports ?? normalizedAbuse.reports ?? 0,
+
+    numDistinctUsers: normalizedAbuse.numDistinctUsers ?? 0,
+    lastReportedAt: normalizedAbuse.lastReportedAt ?? null,
+  },
+};
+      } catch (err) {
+        console.error("Abuse fetch failed, fallback to mock:", err);
+      }
     }
 
-    // Simulate loading delay for realism
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    setAnalysisResult(finalResult);
 
-    try {
-      // Generate mock analysis results directly in frontend
-      const mockResult = generateMockAnalysisResult(analysisValue, type);
+    setAnalysisValue("");
+    setDetectedType("");
 
-      setAnalysisResult(mockResult);
-      setAnalysisValue(""); // Clear input after successful analysis
-      setDetectedType(""); // Clear detected type badge
-      toast.success("Unified threat analysis completed successfully!");
-    } catch (error) {
-      console.error("Analysis processing error:", error);
-      toast.error("Analysis failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    toast.success("Unified threat analysis completed successfully!");
+  } catch (error) {
+    console.error("Analysis processing error:", error);
+    toast.error("Analysis failed. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!analysisResult) return;
