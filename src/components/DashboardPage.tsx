@@ -127,23 +127,22 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       return;
     }
 
-    // Simulate loading delay for realism
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
     try {
-      // Generate mock analysis results directly in frontend
-      const mockResult = generateMockAnalysisResult(analysisValue, type);
+      const res = await fetch(
+        `http://localhost:5000/api/${type}/${analysisValue}`
+      );
 
-      setAnalysisResult(mockResult);
-      setAnalysisValue(""); // Clear input after successful analysis
-      setDetectedType(""); // Clear detected type badge
+      const result = await res.json();
+      console.log("DATA BACKEND:", result);
+
+      setAnalysisResult(result);
       toast.success("Unified threat analysis completed successfully!");
-    } catch (error) {
-      console.error("Analysis processing error:", error);
-      toast.error("Analysis failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+          } catch (error) {
+            console.error("Analysis processing error:", error);
+            toast.error("Analysis failed. Please try again.");
+          } finally {
+            setLoading(false);
+          }
   };
 
   const handleDownload = async (format: "pdf" | "docx") => {
@@ -214,11 +213,11 @@ ${JSON.stringify(result.abuseData, null, 2)}
   };
 
   // Process threat data for visualization
-  const getThreatStats = () => {
-    if (!analysisResult?.vtData?.data?.attributes?.last_analysis_stats) {
+    const getThreatStats = () => {
+    if (!analysisResult?.stats) {
       return { malicious: 0, suspicious: 0, undetected: 0, harmless: 0 };
     }
-    return analysisResult.vtData.data.attributes.last_analysis_stats;
+    return analysisResult.stats;
   };
 
   const threatStats = getThreatStats();
@@ -233,19 +232,11 @@ ${JSON.stringify(result.abuseData, null, 2)}
     { name: "Harmless", value: threatStats.harmless, color: "#10b981" },
     { name: "Undetected", value: threatStats.undetected, color: "#6b7280" },
   ];
+  let lastY = 0;
+    const getVendorResults = () => {
+    if (!analysisResult?.vendors) return [];
 
-  const getVendorResults = () => {
-    if (!analysisResult?.vtData?.data?.attributes?.last_analysis_results)
-      return [];
-    return Object.entries(
-      analysisResult.vtData.data.attributes.last_analysis_results
-    )
-      .map(([vendor, result]: [string, any]) => ({
-        vendor,
-        category: result.category,
-        result: result.result || "Clean",
-      }))
-      .slice(0, 15);
+    return analysisResult.vendors.slice(0, 100);
   };
 
   const getAbuseIPData = () => {
@@ -254,34 +245,32 @@ ${JSON.stringify(result.abuseData, null, 2)}
   };
 
   const getThreatLevel = () => {
-    const abuseScore = getAbuseIPData()?.abuseConfidenceScore || 0;
+    const level = analysisResult?.threatLevel || "LOW";
 
-    if (threatStats.malicious > 5 || abuseScore > 75) {
-      return {
+    const map: any = {
+      CRITICAL: {
         level: "CRITICAL",
         color: "var(--destructive)",
         bgColor: "var(--destructive-light)",
-      };
-    }
-    if (
-      threatStats.malicious > 2 ||
-      threatStats.suspicious > 5 ||
-      abuseScore > 50
-    ) {
-      return {
+      },
+      HIGH: {
         level: "HIGH",
         color: "var(--warning)",
         bgColor: "var(--warning-light)",
-      };
-    }
-    if (threatStats.suspicious > 0 || abuseScore > 25) {
-      return { level: "MEDIUM", color: "#FFB020", bgColor: "#FFF8E1" };
-    }
-    return {
-      level: "LOW",
-      color: "var(--success)",
-      bgColor: "var(--success-light)",
+      },
+      MEDIUM: {
+        level: "MEDIUM",
+        color: "#FFB020",
+        bgColor: "#FFF8E1",
+      },
+      LOW: {
+        level: "LOW",
+        color: "var(--success)",
+        bgColor: "var(--success-light)",
+      },
     };
+
+    return map[level];
   };
 
   const threatLevel = getThreatLevel();
@@ -541,16 +530,47 @@ ${JSON.stringify(result.abuseData, null, 2)}
               <CardContent>
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
-                    <Pie
-                      data={threatLevelData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(entry) => `${entry.name}: ${entry.value}`}
-                      outerRadius={60}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
+                  let lastY = 0;
+                  <Pie
+                    data={threatLevelData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={70}
+                    dataKey="value"
+                    labelLine={true}
+                    label={({ name, value, x, y }) => {
+                      const colors: any = {
+                        Malicious: "#ef4444",
+                        Suspicious: "#f59e0b",
+                        Harmless: "#10b981",
+                        Undetected: "#6b7280",
+                      };
+
+                      let adjustedY = y;
+
+                      // 🚨 kalau terlalu dekat dengan label sebelumnya → geser
+                      if (Math.abs(y - lastY) < 19) {
+                        adjustedY =  y > lastY ? lastY + 19 : lastY - 19;
+                      }
+
+                      // update posisi terakhir
+                      lastY = adjustedY;
+
+                      return (
+                        <text
+                          x={x}
+                          y={adjustedY}
+                          fill={colors[name]}
+                          textAnchor={x > 200 ? "start" : "end"}
+                          dominantBaseline="central"
+                          fontSize={14}
+                          fontWeight="500"
+                        >
+                          {`${name}: ${value}`}
+                        </text>
+                      );
+                    }}
+                  >
                       {threatLevelData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
@@ -611,7 +631,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {getVendorResults().map((vendor, index) => (
+                    {getVendorResults().map((vendor: any, index: number) => (
                       <TableRow key={index}>
                         <TableCell className="text-xs sm:text-sm">
                           {vendor.vendor}
@@ -938,392 +958,3 @@ ${JSON.stringify(result.abuseData, null, 2)}
   );
 }
 
-// Mock analysis result generator
-function generateMockAnalysisResult(value: string, type: string) {
-  // Generate seed from value for consistent results
-  const seed = value
-    .split("")
-    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const malicious = seed % 15;
-  const suspicious = seed % 8;
-  const harmless = 40 + (seed % 20);
-  const undetected = 10 + (seed % 10);
-  const abuseScore = seed % 100;
-  const totalReports = seed % 500;
-
-  // Vendor names
-  const vendors = [
-    "Kaspersky",
-    "McAfee",
-    "Symantec",
-    "Avast",
-    "AVG",
-    "BitDefender",
-    "ESET-NOD32",
-    "F-Secure",
-    "Fortinet",
-    "GData",
-    "Malwarebytes",
-    "Microsoft",
-    "Panda",
-    "Sophos",
-    "TrendMicro",
-    "VIPRE",
-  ];
-
-  // Generate vendor results
-  const vendorResults: any = {};
-  vendors.forEach((vendor, idx) => {
-    let category = "undetected";
-    let result = null;
-
-    if (idx < malicious) {
-      category = "malicious";
-      result = "malware";
-    } else if (idx < malicious + suspicious) {
-      category = "suspicious";
-      result = "suspicious";
-    } else if (idx < malicious + suspicious + harmless) {
-      category = "harmless";
-      result = "clean";
-    }
-
-    vendorResults[vendor] = {
-      category,
-      result,
-      method: "blacklist",
-      engine_name: vendor,
-    };
-  });
-
-  // Geographic data
-  const countries = [
-    "US",
-    "CN",
-    "RU",
-    "DE",
-    "GB",
-    "FR",
-    "JP",
-    "BR",
-    "IN",
-    "CA",
-  ];
-  const countryNames = [
-    "United States",
-    "China",
-    "Russia",
-    "Germany",
-    "United Kingdom",
-    "France",
-    "Japan",
-    "Brazil",
-    "India",
-    "Canada",
-  ];
-  const isps = [
-    "Amazon.com Inc.",
-    "Google LLC",
-    "Cloudflare Inc.",
-    "Microsoft Corporation",
-    "DigitalOcean LLC",
-  ];
-
-  const countryIdx = seed % countries.length;
-
-  // Determine threat level
-  const threatLevel =
-    malicious > 5 || abuseScore > 75
-      ? "CRITICAL"
-      : malicious > 2 || abuseScore > 50
-      ? "HIGH"
-      : malicious > 0 || abuseScore > 25
-      ? "MEDIUM"
-      : "LOW";
-
-  // Generate comprehensive AI analysis
-  const aiAnalysis = `COMPREHENSIVE THREAT INTELLIGENCE REPORT
-
-EXECUTIVE SUMMARY
-
-Analysis of ${type.toUpperCase()}: ${value}
-
-This automated threat intelligence report provides a comprehensive assessment based on multi-source intelligence gathering from VirusTotal and AbuseIPDB databases.
-
-Current Threat Assessment: ${threatLevel}
-
----
-
-1. THREAT LEVEL ASSESSMENT
-
-Overall Classification: ${threatLevel}
-
-Risk Indicators:
-- VirusTotal Malicious Detections: ${malicious}
-- VirusTotal Suspicious Flags: ${suspicious}
-- AbuseIPDB Confidence Score: ${abuseScore}%
-- Total Abuse Reports: ${totalReports}
-
-Severity Rating: ${
-    malicious > 5 || abuseScore > 75
-      ? "🔴 CRITICAL"
-      : malicious > 2 || abuseScore > 50
-      ? "🟠 HIGH"
-      : malicious > 0 || abuseScore > 25
-      ? "🟡 MEDIUM"
-      : "🟢 LOW"
-  }
-
----
-
-2. DETAILED ANALYSIS
-
-Analysis Metadata
-- Analysis Type: ${type}
-- Target Indicator: ${value}
-- Analysis Timestamp: ${new Date().toISOString()}
-- Report Generated: ${new Date().toLocaleString()}
-
-VirusTotal Intelligence Summary
-- Total Security Vendors Analyzed: ${
-    malicious + suspicious + harmless + undetected
-  }
-- Malicious Verdicts: ${malicious} vendor(s)
-- Suspicious Verdicts: ${suspicious} vendor(s)
-- Clean/Harmless: ${harmless} vendor(s)
-- Detection Rate: ${(
-    (malicious / Math.max(malicious + suspicious + harmless + undetected, 1)) *
-    100
-  ).toFixed(2)}%
-
-Vendor Consensus: ${
-    malicious > harmless
-      ? "MAJORITY FLAGGED AS MALICIOUS"
-      : suspicious > 5
-      ? "MIXED VERDICTS - SUSPICIOUS ACTIVITY"
-      : "MAJORITY CONSIDER SAFE"
-  }
-
-AbuseIPDB Reputation Analysis
-- Abuse Confidence Score: ${abuseScore}% (${
-    abuseScore > 75
-      ? "HIGH RISK"
-      : abuseScore > 50
-      ? "MEDIUM RISK"
-      : abuseScore > 25
-      ? "LOW RISK"
-      : "MINIMAL RISK"
-  })
-- Total Reports: ${totalReports}
-- Country: ${countryNames[countryIdx]} (${countries[countryIdx]})
-- ISP/Organization: ${isps[seed % isps.length]}
-
----
-
-3. INDICATORS OF COMPROMISE (IOCs)
-
-Primary IOC:
-- Type: ${type}
-- Value: ${value}
-- Status: ${
-    malicious > 0
-      ? "⚠️ CONFIRMED MALICIOUS"
-      : suspicious > 0
-      ? "⚠️ SUSPICIOUS"
-      : "✓ CLEAN"
-  }
-
-Associated Risk Factors:
-${
-  malicious > 5
-    ? "- High-confidence malware detection across multiple AV engines\n"
-    : ""
-}${
-    malicious > 0 && malicious <= 5
-      ? "- Limited malware detections (possible false positives)\n"
-      : ""
-  }${
-    suspicious > 5
-      ? "- Multiple vendors flag suspicious behavior patterns\n"
-      : ""
-  }${abuseScore > 75 ? "- Extensive abuse history documented\n" : ""}${
-    abuseScore > 50 && abuseScore <= 75 ? "- Moderate abuse reports\n" : ""
-  }${totalReports > 100 ? "- High volume of abuse complaints\n" : ""}${
-    malicious === 0 && suspicious === 0 && abuseScore < 25
-      ? "- No significant threat indicators identified\n"
-      : ""
-  }
-
----
-
-4. CONCLUSION
-
-${
-  malicious > 5 || abuseScore > 75
-    ? `CRITICAL SECURITY ALERT: This indicator represents a significant threat. Immediate action is required to prevent potential compromise. Activate incident response procedures immediately.`
-    : malicious > 2 || abuseScore > 50
-    ? `HIGH RISK WARNING: This indicator shows strong signs of malicious activity. Proactive blocking and investigation are strongly recommended.`
-    : malicious > 0 || suspicious > 5 || abuseScore > 25
-    ? `MODERATE CONCERN: Some security vendors have flagged this indicator as potentially harmful. Additional investigation is warranted.`
-    : `LOW RISK ASSESSMENT: Based on current threat intelligence, this indicator does not appear to pose an immediate threat. Maintain standard security monitoring practices.`
-}
-
-Analyst Recommendation: ${
-    malicious > 5 || abuseScore > 75
-      ? "BLOCK & INVESTIGATE IMMEDIATELY"
-      : malicious > 2 || abuseScore > 50
-      ? "BLOCK & MONITOR CLOSELY"
-      : malicious > 0 || abuseScore > 25
-      ? "MONITOR & DOCUMENT"
-      : "DOCUMENT & PERIODIC REVIEW"
-  }
-
-Next Review: ${malicious > 0 || abuseScore > 0 ? "24-48 hours" : "7-14 days"}
-
----
-
-Report ID: ${Date.now().toString(36).toUpperCase()}
-Classification: ${
-    malicious > 0 || abuseScore > 50 ? "CONFIDENTIAL" : "INTERNAL USE"
-  }`;
-
-  // Generate correlation insights
-  const correlationInsights = `CROSS-SOURCE THREAT CORRELATION ANALYSIS
-
-VirusTotal Intelligence:
-• ${malicious} security vendors flagged this as malicious
-• ${suspicious} vendors reported suspicious activity
-• Overall detection rate: ${(
-    (malicious / Math.max(malicious + suspicious + harmless + undetected, 1)) *
-    100
-  ).toFixed(1)}%
-
-AbuseIPDB Intelligence:
-• Abuse confidence score: ${abuseScore}% (${
-    abuseScore > 75
-      ? "HIGH RISK"
-      : abuseScore > 50
-      ? "MEDIUM RISK"
-      : abuseScore > 25
-      ? "LOW RISK"
-      : "MINIMAL RISK"
-  })
-• Total abuse reports: ${totalReports}
-• Geographic origin: ${countries[countryIdx]}
-• Network: ${isps[seed % isps.length]}
-
-Correlation Verdict:
-${
-  malicious > 5 || abuseScore > 75
-    ? "⚠️ CRITICAL THREAT - Immediate action required. Multiple sources confirm malicious activity."
-    : malicious > 2 || abuseScore > 50
-    ? "⚡ HIGH RISK - Strong indicators of malicious intent. Recommend blocking and investigation."
-    : malicious > 0 || suspicious > 5 || abuseScore > 25
-    ? "ℹ️ MEDIUM RISK - Some suspicious indicators detected. Monitor closely."
-    : "✅ LOW RISK - Minimal threat indicators found across all sources."
-}`;
-
-  // Generate mitigation actions
-  let mitigationActions: string[] = [];
-  if (malicious > 5 || abuseScore > 75) {
-    mitigationActions = [
-      "IMMEDIATE: Block this indicator across all network perimeters (firewall, IDS/IPS, proxy)",
-      "URGENT: Quarantine any systems that have communicated with this indicator",
-      "Conduct full forensic investigation on affected systems",
-      "Search SIEM logs for any historical connections to this indicator",
-      "Update all threat intelligence platforms and security tools with this IOC",
-      "Brief incident response team and escalate to SOC leadership",
-      "Document full timeline of exposure and potential data exfiltration",
-      "Consider engaging external threat intelligence services for attribution",
-    ];
-  } else if (malicious > 2 || abuseScore > 50) {
-    mitigationActions = [
-      "Block this indicator in your security controls as a precautionary measure",
-      "Enable enhanced monitoring for any systems that accessed this indicator",
-      "Review firewall and proxy logs for related activity patterns",
-      "Update threat intelligence feeds with this indicator",
-      "Notify security team for awareness and monitoring",
-      "Schedule follow-up review in 24-48 hours",
-      "Consider adding to watchlist for behavioral analysis",
-    ];
-  } else if (malicious > 0 || suspicious > 5 || abuseScore > 25) {
-    mitigationActions = [
-      "Add to monitoring watchlist for suspicious activity",
-      "Review context of how this indicator was encountered",
-      "Check for any unusual patterns in network traffic",
-      "Document finding for threat intelligence database",
-      "Consider temporary restriction pending further investigation",
-      "Monitor for any changes in threat score over next 7 days",
-    ];
-  } else {
-    mitigationActions = [
-      "No immediate action required - low threat indicators",
-      "Continue standard security monitoring practices",
-      "Document analysis for future reference",
-      "Optionally add to low-priority watchlist",
-      "Review if context changes or new intelligence emerges",
-    ];
-  }
-
-  return {
-    analysisId: `analysis_${Date.now()}`,
-    detectedType: type,
-    aiAnalysis,
-    correlationInsights,
-    mitigationActions,
-    correlation: {
-      vtMalicious: malicious,
-      vtSuspicious: suspicious,
-      abuseScore,
-      abuseReports: totalReports,
-    },
-    vtData: {
-      data: {
-        type,
-        id: value,
-        attributes: {
-          last_analysis_stats: {
-            malicious,
-            suspicious,
-            harmless,
-            undetected,
-            timeout: 0,
-          },
-          last_analysis_results: vendorResults,
-          reputation: malicious > 5 ? -50 : malicious > 2 ? -20 : 0,
-          total_votes: {
-            harmless: seed % 100,
-            malicious: seed % 50,
-          },
-        },
-      },
-    },
-    abuseData: {
-      data: {
-        ipAddress:
-          type === "ip"
-            ? value
-            : `${seed % 255}.${seed % 255}.${seed % 255}.${seed % 255}`,
-        isPublic: true,
-        ipVersion: 4,
-        isWhitelisted: abuseScore < 10,
-        abuseConfidenceScore: abuseScore,
-        countryCode: countries[countryIdx],
-        countryName: countryNames[countryIdx],
-        usageType: "Data Center/Web Hosting/Transit",
-        isp: isps[seed % isps.length],
-        domain: `host.${isps[seed % isps.length]
-          .toLowerCase()
-          .replace(/[^a-z]/g, "")}.com`,
-        totalReports,
-        numDistinctUsers: Math.min(totalReports, seed % 100),
-        lastReportedAt:
-          totalReports > 0
-            ? new Date(
-                Date.now() - (seed % 30) * 24 * 60 * 60 * 1000
-              ).toISOString()
-            : null,
-      },
-    },
-  };
-}
