@@ -127,33 +127,58 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          indicator: analysisValue,
-          type: type,
+      setLoading(true);
+
+      // 🔥 Jalankan 2 API sekaligus
+      const [chatRes, apiRes] = await Promise.all([
+        fetch("http://localhost:5000/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            indicator: analysisValue,
+            type: type,
+          }),
         }),
-      });
+        fetch(`http://localhost:5000/api/analyze`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            indicator: analysisValue,
+            type: type,
+          }),
+        }),
+      ]);
 
-      const data = await res.json();
+      const chatData = await chatRes.json();
+      const apiData = await apiRes.json();
 
-      console.log("API RESULT:", data);
+      console.log("CHAT API:", chatData);
+      console.log("UNIFIED API:", apiData);
 
-      if (!data.success) {
-        throw new Error(data.error);
+      if (!chatData.success) {
+        throw new Error(chatData.error);
       }
 
+      // 🔥 Gabungkan hasil
       setAnalysisResult({
-        aiAnalysis: data.aiAnalysis,
-        vtData: data.vtData,
-        abuseData: data.abuseData,
-        detectedType: type, // 🔥 WAJIB
+        aiAnalysis: chatData.aiAnalysis,
+        vtData: chatData.vtData,
+        abuseData: chatData.abuseData,
+
+        // 🔥 ambil dari unified API
+        stats: apiData.stats,
+        vendors: apiData.vendors,
+        threatLevel: apiData.threatLevel,
+        total: apiData.total,
+
+        detectedType: type,
       });
 
-      toast.success("Analysis completed!");
+      toast.success("Analysis completed successfully!");
     } catch (err) {
       console.error(err);
       toast.error("Analysis failed");
@@ -230,10 +255,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
   // Process threat data for visualization
   const getThreatStats = () => {
-    if (!analysisResult?.vtData?.data?.attributes?.last_analysis_stats) {
+    if (!analysisResult?.stats) {
       return { malicious: 0, suspicious: 0, undetected: 0, harmless: 0 };
     }
-    return analysisResult.vtData.data.attributes.last_analysis_stats;
+    return analysisResult.stats;
   };
 
   const threatStats = getThreatStats();
@@ -243,24 +268,24 @@ ${JSON.stringify(result.abuseData, null, 2)}
   ) as number;
 
   const threatLevelData = [
-    { name: "Malicious", value: threatStats.malicious, color: "#ef4444" },
-    { name: "Suspicious", value: threatStats.suspicious, color: "#f59e0b" },
-    { name: "Harmless", value: threatStats.harmless, color: "#10b981" },
-    { name: "Undetected", value: threatStats.undetected, color: "#6b7280" },
+    { name: "Malicious", value: threatStats.malicious || 0, color: "#ef4444" },
+    {
+      name: "Suspicious",
+      value: threatStats.suspicious || 0,
+      color: "#f59e0b",
+    },
+    { name: "Harmless", value: threatStats.harmless || 0, color: "#10b981" },
+    {
+      name: "Undetected",
+      value: threatStats.undetected || 0,
+      color: "#6b7280",
+    },
   ];
-
+  let lastY = 0;
   const getVendorResults = () => {
-    if (!analysisResult?.vtData?.data?.attributes?.last_analysis_results)
-      return [];
-    return Object.entries(
-      analysisResult.vtData.data.attributes.last_analysis_results,
-    )
-      .map(([vendor, result]: [string, any]) => ({
-        vendor,
-        category: result.category,
-        result: result.result || "Clean",
-      }))
-      .slice(0, 15);
+    if (!analysisResult?.vendors) return [];
+
+    return analysisResult.vendors.slice(0, 100);
   };
 
   const getAbuseIPData = () => {
@@ -269,34 +294,32 @@ ${JSON.stringify(result.abuseData, null, 2)}
   };
 
   const getThreatLevel = () => {
-    const abuseScore = getAbuseIPData()?.abuseConfidenceScore || 0;
+    const level = analysisResult?.threatLevel || "LOW";
 
-    if (threatStats.malicious > 5 || abuseScore > 75) {
-      return {
+    const map: any = {
+      CRITICAL: {
         level: "CRITICAL",
         color: "var(--destructive)",
         bgColor: "var(--destructive-light)",
-      };
-    }
-    if (
-      threatStats.malicious > 2 ||
-      threatStats.suspicious > 5 ||
-      abuseScore > 50
-    ) {
-      return {
+      },
+      HIGH: {
         level: "HIGH",
         color: "var(--warning)",
         bgColor: "var(--warning-light)",
-      };
-    }
-    if (threatStats.suspicious > 0 || abuseScore > 25) {
-      return { level: "MEDIUM", color: "#FFB020", bgColor: "#FFF8E1" };
-    }
-    return {
-      level: "LOW",
-      color: "var(--success)",
-      bgColor: "var(--success-light)",
+      },
+      MEDIUM: {
+        level: "MEDIUM",
+        color: "#FFB020",
+        bgColor: "#FFF8E1",
+      },
+      LOW: {
+        level: "LOW",
+        color: "var(--success)",
+        bgColor: "var(--success-light)",
+      },
     };
+
+    return map[level];
   };
 
   const threatLevel = getThreatLevel();
@@ -322,7 +345,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
         metric: "Geographic",
         score: getAbuseIPData()?.countryCode === "US" ? 80 : 60,
       },
-      { metric: "History", score: getAbuseIPData()?.lastReportedAt ? 50 : 90 },
+      {
+        metric: "History",
+        score: getAbuseIPData()?.lastReportedAt ? 50 : 90,
+      },
     ];
   };
 
@@ -556,15 +582,56 @@ ${JSON.stringify(result.abuseData, null, 2)}
               <CardContent>
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
+                    let lastY = 0;
                     <Pie
                       data={threatLevelData}
                       cx="50%"
                       cy="50%"
-                      labelLine={false}
-                      label={(entry) => `${entry.name}: ${entry.value}`}
-                      outerRadius={60}
-                      fill="#8884d8"
+                      outerRadius={70}
                       dataKey="value"
+                      labelLine={true}
+                      label={({ name, value, x, y }) => {
+                        // 🔥 prevent crash kalau data belum siap
+                        if (
+                          value === undefined ||
+                          value === null ||
+                          isNaN(value) ||
+                          x === undefined ||
+                          y === undefined
+                        ) {
+                          return null;
+                        }
+
+                        const colors: any = {
+                          Malicious: "#ef4444",
+                          Suspicious: "#f59e0b",
+                          Harmless: "#10b981",
+                          Undetected: "#6b7280",
+                        };
+
+                        let adjustedY = y;
+
+                        // 🔥 anti overlap (lebih aman)
+                        if (Math.abs(y - lastY) < 20) {
+                          adjustedY = y > lastY ? lastY + 20 : lastY - 20;
+                        }
+
+                        lastY = adjustedY;
+
+                        return (
+                          <text
+                            x={x}
+                            y={adjustedY}
+                            fill={colors[name] || "#000"}
+                            textAnchor={x > 200 ? "start" : "end"}
+                            dominantBaseline="central"
+                            fontSize={12}
+                            fontWeight="500"
+                          >
+                            {`${name}: ${value}`}
+                          </text>
+                        );
+                      }}
                     >
                       {threatLevelData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -626,7 +693,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {getVendorResults().map((vendor, index) => (
+                    {getVendorResults().map((vendor: any, index: number) => (
                       <TableRow key={index}>
                         <TableCell className="text-xs sm:text-sm">
                           {vendor.vendor}
