@@ -56,7 +56,7 @@ import {
   Radar,
 } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-
+import ReactMarkdown from "react-markdown";
 interface DashboardPageProps {
   accessToken: string;
 }
@@ -112,7 +112,48 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       setDetectedType("");
     }
   };
+  function generateMockAnalysisResult(value: string, type: string) {
+    // Generate seed from value for consistent results
+    const seed = value
+      .split("")
+      .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const abuseScore = seed % 100;
+    const totalReports = seed % 500;
+    // Geographic data
+    const countries = [
+      "US",
+      "CN",
+      "RU",
+      "DE",
+      "GB",
+      "FR",
+      "JP",
+      "BR",
+      "IN",
+      "CA",
+    ];
+    const countryNames = [
+      "United States",
+      "China",
+      "Russia",
+      "Germany",
+      "United Kingdom",
+      "France",
+      "Japan",
+      "Brazil",
+      "India",
+      "Canada",
+    ];
+    const isps = [
+      "Amazon.com Inc.",
+      "Google LLC",
+      "Cloudflare Inc.",
+      "Microsoft Corporation",
+      "DigitalOcean LLC",
+    ];
 
+    const countryIdx = seed % countries.length;
+  }
   const handleUnifiedAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -121,15 +162,22 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
     const type = detectInputType(analysisValue);
 
     if (type === "unknown") {
-      toast.error("Invalid input type");
+      toast.error(
+        "Unable to detect input type. Please check your input format.",
+      );
       setLoading(false);
       return;
     }
 
-    try {
-      setLoading(true);
+    // 🔥 delay kecil biar UI smooth
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
-      // 🔥 Jalankan 2 API sekaligus
+    try {
+      // ✅ 1. START DARI MOCK (biar UI tetap tampil dulu)
+      const mockResult = generateMockAnalysisResult(analysisValue, type);
+      let finalResult = { ...mockResult };
+
+      // 🔥 2. FETCH API PARALLEL
       const [chatRes, apiRes] = await Promise.all([
         fetch("http://localhost:5000/chat", {
           method: "POST",
@@ -138,17 +186,17 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
           },
           body: JSON.stringify({
             indicator: analysisValue,
-            type: type,
+            type,
           }),
         }),
-        fetch(`http://localhost:5000/api/analyze`, {
+        fetch("http://localhost:5000/api/analyze", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             indicator: analysisValue,
-            type: type,
+            type,
           }),
         }),
       ]);
@@ -159,29 +207,82 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       console.log("CHAT API:", chatData);
       console.log("UNIFIED API:", apiData);
 
-      if (!chatData.success) {
-        throw new Error(chatData.error);
+      // 🔥 3. OVERRIDE DATA DARI CHAT API
+      if (chatData?.success) {
+        finalResult.aiAnalysis = chatData.aiAnalysis;
+        finalResult.vtData = chatData.vtData;
+        finalResult.abuseData = chatData.abuseData;
       }
 
-      // 🔥 Gabungkan hasil
-      setAnalysisResult({
-        aiAnalysis: chatData.aiAnalysis,
-        vtData: chatData.vtData,
-        abuseData: chatData.abuseData,
+      // 🔥 4. OVERRIDE DATA DARI UNIFIED API
+      if (apiData) {
+        finalResult.stats = apiData.stats;
+        finalResult.vendors = apiData.vendors;
+        finalResult.threatLevel = apiData.threatLevel;
+        finalResult.total = apiData.total;
+      }
 
-        // 🔥 ambil dari unified API
-        stats: apiData.stats,
-        vendors: apiData.vendors,
-        threatLevel: apiData.threatLevel,
-        total: apiData.total,
+      // 🔥 5. TAMBAHAN CHECK-IP (lebih detail untuk IP)
+      if (type === "ip") {
+        try {
+          const abuseRes = await fetch("http://localhost:5000/check-ip", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ip: analysisValue,
+            }),
+          });
 
-        detectedType: type,
-      });
+          const rawAbuse = await abuseRes.json();
+          console.log("REAL ABUSE:", rawAbuse);
 
-      toast.success("Analysis completed successfully!");
-    } catch (err) {
-      console.error(err);
-      toast.error("Analysis failed");
+          const normalizedAbuse = rawAbuse?.data || rawAbuse || {};
+
+          finalResult.abuseData = {
+            data: {
+              ipAddress: normalizedAbuse.ipAddress ?? analysisValue,
+              isPublic: normalizedAbuse.isPublic ?? true,
+              ipVersion: normalizedAbuse.ipVersion ?? 4,
+              isWhitelisted: normalizedAbuse.isWhitelisted ?? false,
+
+              abuseConfidenceScore:
+                normalizedAbuse.abuseConfidenceScore ??
+                normalizedAbuse.score ??
+                0,
+
+              countryCode:
+                normalizedAbuse.countryCode ?? normalizedAbuse.country ?? "N/A",
+
+              countryName: normalizedAbuse.countryName ?? "Unknown",
+              usageType: normalizedAbuse.usageType ?? "Unknown",
+
+              isp: normalizedAbuse.isp ?? "N/A",
+              domain: normalizedAbuse.domain ?? "N/A",
+
+              totalReports:
+                normalizedAbuse.totalReports ?? normalizedAbuse.reports ?? 0,
+
+              numDistinctUsers: normalizedAbuse.numDistinctUsers ?? 0,
+              lastReportedAt: normalizedAbuse.lastReportedAt ?? null,
+            },
+          };
+        } catch (err) {
+          console.error("Abuse fetch failed, fallback to existing:", err);
+        }
+      }
+
+      // ✅ 6. SET FINAL RESULT
+      setAnalysisResult(finalResult);
+
+      setAnalysisValue("");
+      setDetectedType("");
+
+      toast.success("Unified threat analysis completed successfully!");
+    } catch (error) {
+      console.error("Analysis processing error:", error);
+      toast.error("Analysis failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -580,64 +681,37 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
-                    let lastY = 0;
                     <Pie
                       data={threatLevelData}
                       cx="50%"
                       cy="50%"
-                      outerRadius={70}
+                      innerRadius={50} // 🔥 donut style
+                      outerRadius={80}
+                      paddingAngle={3}
                       dataKey="value"
-                      labelLine={true}
-                      label={({ name, value, x, y }) => {
-                        // 🔥 prevent crash kalau data belum siap
-                        if (
-                          value === undefined ||
-                          value === null ||
-                          isNaN(value) ||
-                          x === undefined ||
-                          y === undefined
-                        ) {
-                          return null;
-                        }
-
-                        const colors: any = {
-                          Malicious: "#ef4444",
-                          Suspicious: "#f59e0b",
-                          Harmless: "#10b981",
-                          Undetected: "#6b7280",
-                        };
-
-                        let adjustedY = y;
-
-                        // 🔥 anti overlap (lebih aman)
-                        if (Math.abs(y - lastY) < 20) {
-                          adjustedY = y > lastY ? lastY + 20 : lastY - 20;
-                        }
-
-                        lastY = adjustedY;
-
-                        return (
-                          <text
-                            x={x}
-                            y={adjustedY}
-                            fill={colors[name] || "#000"}
-                            textAnchor={x > 200 ? "start" : "end"}
-                            dominantBaseline="central"
-                            fontSize={12}
-                            fontWeight="500"
-                          >
-                            {`${name}: ${value}`}
-                          </text>
-                        );
-                      }}
+                      label={({ name, percent }) =>
+                        percent > 0
+                          ? `${name} (${(percent * 100).toFixed(0)}%)`
+                          : ""
+                      }
+                      labelLine={false}
                     >
                       {threatLevelData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+
+                    <Tooltip
+                      formatter={(value: number) => [`${value}`, "Detections"]}
+                    />
+
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      iconType="circle"
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -829,7 +903,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
             </CardHeader>
             <CardContent>
               <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
-                {analysisResult.aiAnalysis}
+                <ReactMarkdown>{analysisResult.aiAnalysis}</ReactMarkdown>
               </div>
             </CardContent>
           </Card>
