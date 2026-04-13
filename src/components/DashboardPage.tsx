@@ -288,34 +288,28 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
     }
   };
   const handleDownload = async (format: "pdf" | "docx") => {
-    if (!analysisResult) return;
+    if (!analysisResult?.aiAnalysis) return;
 
     try {
-      const fileName = `threat_analysis_${Date.now()}.${format}`;
-      await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/history`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            analysisId: analysisResult.analysisId,
-            fileName,
-            format,
-          }),
+      const res = await fetch("http://localhost:5000/api/export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          content: analysisResult.aiAnalysis,
+          format,
+        }),
+      });
 
-      const content = generateReportContent(analysisResult);
-      const blob = new Blob([content], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
+      const blob = await res.blob();
+
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
+
       a.href = url;
-      a.download = fileName;
+      a.download = `Threat Intelligence Report.${format}`;
       a.click();
-      URL.revokeObjectURL(url);
 
       toast.success(`Report downloaded as ${format.toUpperCase()}`);
     } catch (error) {
