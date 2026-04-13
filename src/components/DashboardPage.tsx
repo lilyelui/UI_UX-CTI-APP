@@ -214,7 +214,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
   // Process threat data for visualization
     const getThreatStats = () => {
-    if (!analysisResult?.stats) {
+    if (!analysisResult?.vtData?.stats) {
       return { malicious: 0, suspicious: 0, undetected: 0, harmless: 0 };
     }
     return analysisResult.stats;
@@ -234,7 +234,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
   ];
   let lastY = 0;
     const getVendorResults = () => {
-    if (!analysisResult?.vendors) return [];
+    if (!analysisResult?.vtData?.vendors) return [];
 
     return analysisResult.vendors.slice(0, 100);
   };
@@ -245,7 +245,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
   };
 
   const getThreatLevel = () => {
-    const level = analysisResult?.threatLevel || "LOW";
+    const level = analysisResult?.vtData?.threatLevel || "LOW";
 
     const map: any = {
       CRITICAL: {
