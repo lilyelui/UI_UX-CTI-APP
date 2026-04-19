@@ -67,7 +67,7 @@ export function LoginPage({
       if (error) {
         console.error("Google login error:", error);
         toast.error(
-          "Google login not configured. Please use email login or contact administrator."
+          "Google login not configured. Please use email login or contact administrator.",
         );
       }
     } catch (error) {
@@ -78,7 +78,7 @@ export function LoginPage({
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen w-full flex items-center justify-center p-4"
       style={{
         background: "linear-gradient(135deg, var(--sidebar) 0%, #1E293B 100%)",
       }}

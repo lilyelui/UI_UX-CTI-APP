@@ -1,13 +1,8 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from './info';
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { projectId, publicAnonKey } from "./info";
 
-// Singleton instance
 let supabaseInstance: SupabaseClient | null = null;
 
-/**
- * Get or create a single Supabase client instance
- * This prevents multiple instances from being created which can cause auth issues
- */
 export function getSupabaseClient(): SupabaseClient {
   if (!supabaseInstance) {
     supabaseInstance = createClient(
@@ -15,21 +10,18 @@ export function getSupabaseClient(): SupabaseClient {
       publicAnonKey,
       {
         auth: {
-          autoRefreshToken: true,
           persistSession: true,
+          autoRefreshToken: true,
           detectSessionInUrl: true,
           storageKey: `sb-${projectId}-auth-token`,
         },
-      }
+      },
     );
   }
-  
+
   return supabaseInstance;
 }
 
-/**
- * Reset the client instance (useful for testing or logout)
- */
-export function resetSupabaseClient(): void {
+export function resetSupabaseClient() {
   supabaseInstance = null;
 }

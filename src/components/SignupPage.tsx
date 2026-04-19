@@ -85,7 +85,7 @@ export function SignupPage({
       if (error) {
         console.error("Google signup error:", error);
         toast.error(
-          "Google signup not configured. Please use email signup or contact administrator."
+          "Google signup not configured. Please use email signup or contact administrator.",
         );
       }
     } catch (error) {
@@ -96,7 +96,7 @@ export function SignupPage({
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen w-full flex items-center justify-center p-4"
       style={{
         background: "linear-gradient(135deg, var(--sidebar) 0%, #1E293B 100%)",
       }}
