@@ -212,6 +212,9 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.aiAnalysis = chatData.aiAnalysis;
         finalResult.vtData = chatData.vtData;
         finalResult.abuseData = chatData.abuseData;
+        finalResult.mispData = chatData.mispData;
+        finalResult.correlationInsights = chatData.correlationInsights;
+        finalResult.mitigationActions = chatData.mitigationActions;
       }
 
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
@@ -387,7 +390,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
     if (!analysisResult?.abuseData?.data) return null;
     return analysisResult.abuseData.data;
   };
-
+  const getMISPData = () => {
+    if (!analysisResult?.mispData) return null;
+    return analysisResult.mispData;
+  };
   const getThreatLevel = () => {
     const level = analysisResult?.threatLevel || "LOW";
 
@@ -421,7 +427,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
   // Correlation data for radar chart
   const getCorrelationData = () => {
-    if (!analysisResult?.correlation) return [];
+    const misp = getMISPData();
 
     return [
       {
@@ -433,16 +439,21 @@ ${JSON.stringify(result.abuseData, null, 2)}
         score: 100 - (getAbuseIPData()?.abuseConfidenceScore || 0),
       },
       {
-        metric: "Network",
-        score: getAbuseIPData()?.totalReports > 10 ? 30 : 90,
+        metric: "Intel",
+        score: Math.min((misp?.matchCount || 0) * 20, 100),
       },
       {
-        metric: "Geographic",
-        score: getAbuseIPData()?.countryCode === "US" ? 80 : 60,
+        metric: "Confidence",
+        score:
+          misp?.confidence === "High"
+            ? 95
+            : misp?.confidence === "Medium"
+              ? 65
+              : 30,
       },
       {
         metric: "History",
-        score: getAbuseIPData()?.lastReportedAt ? 50 : 90,
+        score: misp?.lastSeen && misp?.lastSeen !== "-" ? 80 : 40,
       },
     ];
   };
@@ -865,42 +876,128 @@ ${JSON.stringify(result.abuseData, null, 2)}
               </CardContent>
             </Card>
           )}
+          {/* ===============================
+   MISP THREAT INTELLIGENCE CARD
+================================ */}
+          {getMISPData() && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" style={{ color: "#2563eb" }} />
 
-          {/* 8. AI-Generated Analysis Report */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <span className="text-base sm:text-lg flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  AI-Generated Analysis Report
-                </span>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => handleDownload("pdf")}
-                    className="text-xs sm:text-sm"
-                  >
-                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                    Download PDF
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDownload("docx")}
-                    className="text-xs sm:text-sm"
-                  >
-                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                    Download DOCX
-                  </Button>
+                  <CardTitle className="text-base sm:text-lg">
+                    MISP Threat Intelligence
+                  </CardTitle>
                 </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
-                <ReactMarkdown>{analysisResult.aiAnalysis}</ReactMarkdown>
-              </div>
-            </CardContent>
-          </Card>
+
+                <CardDescription className="text-xs sm:text-sm">
+                  Community sourced threat intelligence correlation
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-6">
+                {/* KPI */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">Match Count</p>
+                    <p className="text-2xl font-bold">
+                      {getMISPData()?.matchCount || 0}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">Confidence</p>
+                    <p
+                      className={`text-2xl font-bold ${
+                        getMISPData()?.confidence === "High"
+                          ? "text-red-600"
+                          : getMISPData()?.confidence === "Medium"
+                            ? "text-yellow-500"
+                            : "text-green-600"
+                      }`}
+                    >
+                      {getMISPData()?.confidence || "Low"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">
+                      Threat Level
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {getMISPData()?.threatLevel || "Unknown"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">Published</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {getMISPData()?.published || "No"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* DETAIL */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+                  <div className="rounded-lg border p-4 space-y-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Threat Actor
+                      </p>
+                      <p className="font-semibold">
+                        {getMISPData()?.threatActor || "-"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Source Organization
+                      </p>
+                      <p className="font-semibold">
+                        {getMISPData()?.sourceOrg || "-"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        TLP Classification
+                      </p>
+                      <p className="font-semibold">
+                        {getMISPData()?.tlp || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border p-4 space-y-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Last Updated
+                      </p>
+                      <p className="font-semibold">
+                        {getMISPData()?.lastUpdated || "-"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Correlation
+                      </p>
+                      <p className="font-semibold text-green-600">
+                        {getMISPData()?.correlation || "Unknown"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        IOC Intelligence Source
+                      </p>
+                      <p className="font-semibold">MISP Federation Feed</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* 9. Threat Correlation Engine */}
           <Card>
@@ -999,6 +1096,42 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     )}
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 8. AI-Generated Analysis Report */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <span className="text-base sm:text-lg flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  AI-Generated Analysis Report
+                </span>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handleDownload("pdf")}
+                    className="text-xs sm:text-sm"
+                  >
+                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    Download PDF
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownload("docx")}
+                    className="text-xs sm:text-sm"
+                  >
+                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    Download DOCX
+                  </Button>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
+                <ReactMarkdown>{analysisResult.aiAnalysis}</ReactMarkdown>
               </div>
             </CardContent>
           </Card>
