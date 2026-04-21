@@ -425,38 +425,42 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
   const threatLevel = getThreatLevel();
 
+  const getCorrelationScores = () => {
+  const vtRatio = threatStats.malicious / Math.max(totalVendors, 1);
+  const abuse = getAbuseIPData()?.abuseConfidenceScore || 0;
+  const misp = getMISPData();
+
+  const mispScore =
+    (misp?.matchCount || 0) * 15 +
+    (misp?.confidence === "High"
+      ? 30
+      : misp?.confidence === "Medium"
+        ? 15
+        : 5);
+
+  return {
+    malware: vtRatio * 100,
+    reputation: abuse,
+    intel: Math.min(mispScore, 100),
+    confidence:
+      vtRatio * 40 +
+      (abuse / 100) * 30 +
+      (mispScore / 100) * 30,
+  };
+};
+
   // Correlation data for radar chart
   const getCorrelationData = () => {
-    const misp = getMISPData();
+  const scores = getCorrelationScores();
 
-    return [
-      {
-        metric: "Malware",
-        score: (threatStats.malicious / Math.max(totalVendors, 1)) * 100,
-      },
-      {
-        metric: "Reputation",
-        score: 100 - (getAbuseIPData()?.abuseConfidenceScore || 0),
-      },
-      {
-        metric: "Intel",
-        score: Math.min((misp?.matchCount || 0) * 20, 100),
-      },
-      {
-        metric: "Confidence",
-        score:
-          misp?.confidence === "High"
-            ? 95
-            : misp?.confidence === "Medium"
-              ? 65
-              : 30,
-      },
-      {
-        metric: "History",
-        score: misp?.lastSeen && misp?.lastSeen !== "-" ? 80 : 40,
-      },
-    ];
-  };
+  return [
+    { metric: "Malware", score: scores.malware },
+    { metric: "Reputation", score: scores.reputation },
+    { metric: "Intel", score: scores.intel },
+    { metric: "Confidence", score: scores.confidence },
+    { metric: "History", score: scores.intel * 0.8 },
+  ];
+};
 
   const getTypeIcon = (type: string) => {
     if (type.includes("hash")) return "🔐";
@@ -1049,51 +1053,11 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     Correlation Insights
                   </h4>
                   <div className="space-y-2 text-xs sm:text-sm">
-                    {analysisResult.correlationInsights ? (
-                      <div className="p-3 rounded-lg bg-muted">
-                        <p className="whitespace-pre-wrap">
-                          {analysisResult.correlationInsights}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            VT
-                          </Badge>
-                          <span>
-                            VirusTotal detected {threatStats.malicious}{" "}
-                            malicious vendors
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            Abuse
-                          </Badge>
-                          <span>
-                            AbuseIPDB confidence:{" "}
-                            {getAbuseIPData()?.abuseConfidenceScore || 0}%
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            Geo
-                          </Badge>
-                          <span>
-                            Origin: {getAbuseIPData()?.countryCode || "Unknown"}
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            History
-                          </Badge>
-                          <span>
-                            {getAbuseIPData()?.totalReports || 0} abuse reports
-                            filed
-                          </span>
-                        </div>
-                      </>
-                    )}
+                    <div className="p-3 rounded-lg bg-muted">
+                      <p className="whitespace-pre-wrap">
+                       {analysisResult.correlationInsights}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
