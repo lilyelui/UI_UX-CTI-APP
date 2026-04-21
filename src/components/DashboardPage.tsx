@@ -467,7 +467,8 @@ ${JSON.stringify(result.abuseData, null, 2)}
     if (type === "asn") return "🏢";
     return "🔍";
   };
-
+  console.log("MISP FULL:", getMISPData());
+  console.log("MISP TAGS:", getMISPData()?.tags);
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       <div>
@@ -930,9 +931,9 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   </div>
 
                   <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Published</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {getMISPData()?.published || "No"}
+                    <p className="text-xs text-muted-foreground">Score </p>
+                    <p className="text-2xl font-bold">
+                      {getMISPData()?.score || "-"}
                     </p>
                   </div>
                 </div>
@@ -959,39 +960,70 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     </div>
 
                     <div>
-                      <p className="text-xs text-muted-foreground">
-                        TLP Classification
-                      </p>
-                      <p className="font-semibold">
-                        {getMISPData()?.tlp || "-"}
-                      </p>
+                      <p className="text-sm text-muted-foreground">Tags</p>
+
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {getMISPData()?.tags?.length ? (
+                          getMISPData().tags.map(
+                            (tag: string, index: number) => (
+                              <span
+                                key={index}
+                                className="px-2 py-1 text-xs rounded-md bg-blue-100 text-blue-700 border"
+                              >
+                                {tag}
+                              </span>
+                            ),
+                          )
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   <div className="rounded-lg border p-4 space-y-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">
-                        Last Updated
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Published
                       </p>
-                      <p className="font-semibold">
-                        {getMISPData()?.lastUpdated || "-"}
+
+                      <p
+                        className={`font-semibold mb-5 ${
+                          getMISPData()?.published
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {getMISPData()?.published ? "Yes" : "No"}
                       </p>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="px-3 py-1 rounded-md bg-blue-100 text-black text-sm font-medium">
+                          First: {getMISPData()?.firstPublishDate}
+                        </span>
+
+                        <span className="px-3 py-1 rounded-md bg-blue-100 text-black text-sm font-medium">
+                          Last: {getMISPData()?.lastPublishDate}
+                        </span>
+                      </div>
                     </div>
 
                     <div>
                       <p className="text-xs text-muted-foreground">
-                        Correlation
+                        First Recorded Change
                       </p>
                       <p className="font-semibold text-green-600">
-                        {getMISPData()?.correlation || "Unknown"}
+                        {getMISPData()?.firstRecordedChange || "Unknown"}
                       </p>
                     </div>
 
                     <div>
                       <p className="text-xs text-muted-foreground">
-                        IOC Intelligence Source
+                        Last change
                       </p>
-                      <p className="font-semibold">MISP Federation Feed</p>
+                      <p className="font-semibold text-green-600">
+                        {getMISPData()?.lastChange || "Unknown"}
+                      </p>
                     </div>
                   </div>
                 </div>
