@@ -216,7 +216,9 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.mispData = chatData.mispData;
         finalResult.correlationInsights = chatData.correlationInsights;
         finalResult.mitigationActions = chatData.mitigationActions;
-
+        finalResult.confidence = chatData.confidence;
+        finalResult.mitre = chatData.mitre;
+        finalResult.reasoning = chatData.reasoning;
         // NEW
         finalResult.nvdData = chatData.nvdData;
         finalResult.kevData = chatData.kevData;
@@ -1273,6 +1275,41 @@ ${JSON.stringify(result.abuseData, null, 2)}
               <CardDescription className="text-xs sm:text-sm">
                 Step-by-step security response plan
               </CardDescription>
+
+              {analysisResult.confidence !== undefined && (
+                <div className="mt-2 space-y-1 text-xs sm:text-sm">
+                  <div>
+                    <strong>Confidence:</strong>{" "}
+                    <span
+                      className={
+                        analysisResult.confidence > 70
+                          ? "text-red-600"
+                          : analysisResult.confidence > 40
+                            ? "text-yellow-500"
+                            : "text-green-600"
+                      }
+                    >
+                      {analysisResult.confidence}%
+                    </span>
+                  </div>
+
+                  {analysisResult.mitre && (
+                    <div>
+                      <strong>MITRE:</strong> [{analysisResult.mitre.technique}]{" "}
+                      {analysisResult.mitre.name}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 🔥 OPTIONAL: REASONING */}
+              {analysisResult.reasoning && (
+                <div className="mt-2 p-2 rounded bg-muted text-xs whitespace-pre-wrap">
+                  <strong>Reason:</strong>
+                  <br />
+                  {analysisResult.reasoning}
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">
