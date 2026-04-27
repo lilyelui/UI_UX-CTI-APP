@@ -215,6 +215,10 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.mispData = chatData.mispData;
         finalResult.correlationInsights = chatData.correlationInsights;
         finalResult.mitigationActions = chatData.mitigationActions;
+        finalResult.nvdData = chatData.nvdData;
+        finalResult.kevData = chatData.kevData;
+        finalResult.detectedProduct = chatData.detectedProduct;
+        finalResult.detectedVersion = chatData.detectedVersion;
       }
 
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
@@ -394,6 +398,13 @@ ${JSON.stringify(result.abuseData, null, 2)}
     if (!analysisResult?.mispData) return null;
     return analysisResult.mispData;
   };
+  const getNVDData = () => {
+    return analysisResult?.nvdData || null;
+  };
+
+  const getKEVData = () => {
+    return analysisResult?.kevData || null;
+  };
   const getThreatLevel = () => {
     const level = analysisResult?.threatLevel || "LOW";
 
@@ -428,6 +439,11 @@ ${JSON.stringify(result.abuseData, null, 2)}
   // Correlation data for radar chart
   const getCorrelationData = () => {
     const misp = getMISPData();
+    const nvd = getNVDData();
+
+    const cveCount = nvd?.vulnerabilities?.length || 0;
+
+    const kev = getKEVData()?.exploited ? 100 : 0;
 
     return [
       {
@@ -436,24 +452,19 @@ ${JSON.stringify(result.abuseData, null, 2)}
       },
       {
         metric: "Reputation",
-        score: 100 - (getAbuseIPData()?.abuseConfidenceScore || 0),
+        score: getAbuseIPData()?.abuseConfidenceScore || 0,
       },
       {
         metric: "Intel",
         score: Math.min((misp?.matchCount || 0) * 20, 100),
       },
       {
-        metric: "Confidence",
-        score:
-          misp?.confidence === "High"
-            ? 95
-            : misp?.confidence === "Medium"
-              ? 65
-              : 30,
+        metric: "Exposure",
+        score: Math.min(cveCount * 15, 100),
       },
       {
-        metric: "History",
-        score: misp?.lastSeen && misp?.lastSeen !== "-" ? 80 : 40,
+        metric: "KEV",
+        score: kev,
       },
     ];
   };
@@ -1030,6 +1041,64 @@ ${JSON.stringify(result.abuseData, null, 2)}
               </CardContent>
             </Card>
           )}
+          {getNVDData() && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-red-500" />
+                  <CardTitle className="text-base sm:text-lg">
+                    Vulnerability Intelligence
+                  </CardTitle>
+                </div>
+
+                <CardDescription className="text-xs sm:text-sm">
+                  NVD / CVE exposure analysis
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">Product</p>
+                    <p className="font-bold">
+                      {analysisResult.detectedProduct || "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">Version</p>
+                    <p className="font-bold">
+                      {analysisResult.detectedVersion || "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">CVEs Found</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {getNVDData()?.vulnerabilities?.length || 0}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">KEV</p>
+                    <p className="font-bold">
+                      {getKEVData()?.exploited ? "YES" : "NO"}
+                    </p>
+                  </div>
+                </div>
+
+                {getNVDData()?.vulnerabilities?.[0] && (
+                  <div className="rounded-lg border p-4">
+                    <p className="text-xs text-muted-foreground">Primary CVE</p>
+
+                    <p className="font-bold text-red-600">
+                      {getNVDData().vulnerabilities[0].cve.id}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* 9. Threat Correlation Engine */}
           <Card>
@@ -1081,51 +1150,11 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     Correlation Insights
                   </h4>
                   <div className="space-y-2 text-xs sm:text-sm">
-                    {analysisResult.correlationInsights ? (
-                      <div className="p-3 rounded-lg bg-muted">
-                        <p className="whitespace-pre-wrap">
-                          {analysisResult.correlationInsights}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            VT
-                          </Badge>
-                          <span>
-                            VirusTotal detected {threatStats.malicious}{" "}
-                            malicious vendors
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            Abuse
-                          </Badge>
-                          <span>
-                            AbuseIPDB confidence:{" "}
-                            {getAbuseIPData()?.abuseConfidenceScore || 0}%
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            Geo
-                          </Badge>
-                          <span>
-                            Origin: {getAbuseIPData()?.countryCode || "Unknown"}
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            History
-                          </Badge>
-                          <span>
-                            {getAbuseIPData()?.totalReports || 0} abuse reports
-                            filed
-                          </span>
-                        </div>
-                      </>
-                    )}
+                    <div className="p-3 rounded-lg bg-muted">
+                      <p className="whitespace-pre-wrap">
+                        {analysisResult.correlationInsights}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
