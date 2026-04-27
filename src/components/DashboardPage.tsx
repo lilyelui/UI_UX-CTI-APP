@@ -202,6 +202,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       ]);
 
       const chatData = await chatRes.json();
+      console.log(analysisResult);
       const apiData = await apiRes.json();
 
       console.log("CHAT API:", chatData);
@@ -215,8 +216,11 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.mispData = chatData.mispData;
         finalResult.correlationInsights = chatData.correlationInsights;
         finalResult.mitigationActions = chatData.mitigationActions;
+
+        // NEW
         finalResult.nvdData = chatData.nvdData;
         finalResult.kevData = chatData.kevData;
+        finalResult.censysData = chatData.censysData;
         finalResult.detectedProduct = chatData.detectedProduct;
         finalResult.detectedVersion = chatData.detectedVersion;
       }
@@ -398,6 +402,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
     if (!analysisResult?.mispData) return null;
     return analysisResult.mispData;
   };
+  const getCensysData = () => {
+    return analysisResult?.censysData || null;
+  };
+
   const getNVDData = () => {
     return analysisResult?.nvdData || null;
   };
@@ -436,36 +444,37 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
   const threatLevel = getThreatLevel();
 
+  const getCorrelationScores = () => {
+    const vtRatio = threatStats.malicious / Math.max(totalVendors, 1);
+    const abuse = getAbuseIPData()?.abuseConfidenceScore || 0;
+    const misp = getMISPData();
+
+    const mispScore =
+      (misp?.matchCount || 0) * 15 +
+      (misp?.confidence === "High"
+        ? 30
+        : misp?.confidence === "Medium"
+          ? 15
+          : 5);
+
+    return {
+      malware: vtRatio * 100,
+      reputation: abuse,
+      intel: Math.min(mispScore, 100),
+      confidence: vtRatio * 40 + (abuse / 100) * 30 + (mispScore / 100) * 30,
+    };
+  };
+
   // Correlation data for radar chart
   const getCorrelationData = () => {
-    const misp = getMISPData();
-    const nvd = getNVDData();
-
-    const cveCount = nvd?.vulnerabilities?.length || 0;
-
-    const kev = getKEVData()?.exploited ? 100 : 0;
+    const scores = getCorrelationScores();
 
     return [
-      {
-        metric: "Malware",
-        score: (threatStats.malicious / Math.max(totalVendors, 1)) * 100,
-      },
-      {
-        metric: "Reputation",
-        score: getAbuseIPData()?.abuseConfidenceScore || 0,
-      },
-      {
-        metric: "Intel",
-        score: Math.min((misp?.matchCount || 0) * 20, 100),
-      },
-      {
-        metric: "Exposure",
-        score: Math.min(cveCount * 15, 100),
-      },
-      {
-        metric: "KEV",
-        score: kev,
-      },
+      { metric: "Malware", score: scores.malware },
+      { metric: "Reputation", score: scores.reputation },
+      { metric: "Intel", score: scores.intel },
+      { metric: "Confidence", score: scores.confidence },
+      { metric: "History", score: scores.intel * 0.8 },
     ];
   };
 
@@ -1041,64 +1050,116 @@ ${JSON.stringify(result.abuseData, null, 2)}
               </CardContent>
             </Card>
           )}
-          {getNVDData() && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                  <CardTitle className="text-base sm:text-lg">
-                    Vulnerability Intelligence
-                  </CardTitle>
+
+          {/*Product Detection*/}
+          {/* <Card>
+            <CardHeader>
+              <CardTitle>Technology Detection</CardTitle>
+              <CardDescription>
+                Fingerprint from Shodan / Censys
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Product</p>
+                  <p className="text-xl font-bold">
+                    {analysisResult?.detectedProduct || "-"}
+                  </p>
                 </div>
 
-                <CardDescription className="text-xs sm:text-sm">
-                  NVD / CVE exposure analysis
+                <div>
+                  <p className="text-sm text-muted-foreground">Version</p>
+                  <p className="text-xl font-bold">
+                    {analysisResult?.detectedVersion || "-"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card> */}
+          {/*Censys Data*/}
+          {/* {getCensysData() && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Censys Exposure Intelligence</CardTitle>
+                <CardDescription>Internet exposed services</CardDescription>
+              </CardHeader>
+
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Services</p>
+                    <p className="text-2xl font-bold">
+                      {getCensysData()?.services?.length || 0}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">Country</p>
+                    <p className="text-2xl font-bold">
+                      {getCensysData()?.location?.country || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">ASN</p>
+                    <p className="text-base font-semibold">
+                      {getCensysData()?.autonomous_system?.name || "-"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )} */}
+          {/*NVD Data & Kev*/}
+          {/* {getNVDData() && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Vulnerability Intelligence</CardTitle>
+                <CardDescription>
+                  NVD + CISA Known Exploited Vulnerabilities
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Product</p>
-                    <p className="font-bold">
-                      {analysisResult.detectedProduct || "-"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Version</p>
-                    <p className="font-bold">
-                      {analysisResult.detectedVersion || "-"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">CVEs Found</p>
-                    <p className="text-2xl font-bold text-red-600">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">CVE Count</p>
+                    <p className="text-2xl font-bold">
                       {getNVDData()?.vulnerabilities?.length || 0}
                     </p>
                   </div>
 
-                  <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">KEV</p>
-                    <p className="font-bold">
-                      {getKEVData()?.exploited ? "YES" : "NO"}
-                    </p>
+                  <div>
+                    <p className="text-sm text-muted-foreground">KEV Status</p>
+
+                    <Badge
+                      variant={
+                        getKEVData()?.exploited ? "destructive" : "secondary"
+                      }
+                    >
+                      {getKEVData()?.exploited
+                        ? "Known Exploited"
+                        : "Not Listed"}
+                    </Badge>
                   </div>
                 </div>
 
-                {getNVDData()?.vulnerabilities?.[0] && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Primary CVE</p>
+                {getNVDData()
+                  ?.vulnerabilities?.slice(0, 3)
+                  .map((item: any, i: number) => (
+                    <div key={i} className="border rounded p-3">
+                      <p className="font-semibold">{item.cve?.id}</p>
 
-                    <p className="font-bold text-red-600">
-                      {getNVDData().vulnerabilities[0].cve.id}
-                    </p>
-                  </div>
-                )}
+                      <p className="text-sm text-muted-foreground">
+                        {item.cve?.descriptions?.[0]?.value?.slice(0, 160)}...
+                      </p>
+                    </div>
+                  ))}
               </CardContent>
             </Card>
-          )}
+          )} */}
 
           {/* 9. Threat Correlation Engine */}
           <Card>
