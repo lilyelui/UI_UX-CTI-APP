@@ -215,16 +215,21 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.abuseData = chatData.abuseData;
         finalResult.mispData = chatData.mispData;
         finalResult.correlationInsights = chatData.correlationInsights;
-        finalResult.mitigationActions = chatData.mitigationActions;
         finalResult.confidence = chatData.confidence;
-        finalResult.mitre = chatData.mitre;
         finalResult.reasoning = chatData.reasoning;
-        // NEW
+        finalResult.cve = chatData.cve;
+        finalResult.cwe = chatData.cwe;
+        // Flat string for the MITRE Technique label
+        finalResult.mitreTechnique = chatData.mitreTechnique ?? null;
+        // ✅ Full objects array — THIS is what the card renders
+        finalResult.mitreMitigations = Array.isArray(chatData.mitreMitigations)
+          ? chatData.mitreMitigations
+          : [];
+        finalResult.mitigationActions = finalResult.mitreMitigations.map(
+          (m: any) => m.name,
+        );
+        finalResult.mitigationDetails = finalResult.mitreMitigations;
         finalResult.nvdData = chatData.nvdData;
-        finalResult.kevData = chatData.kevData;
-        finalResult.censysData = chatData.censysData;
-        finalResult.detectedProduct = chatData.detectedProduct;
-        finalResult.detectedVersion = chatData.detectedVersion;
       }
 
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
@@ -403,17 +408,6 @@ ${JSON.stringify(result.abuseData, null, 2)}
   const getMISPData = () => {
     if (!analysisResult?.mispData) return null;
     return analysisResult.mispData;
-  };
-  const getCensysData = () => {
-    return analysisResult?.censysData || null;
-  };
-
-  const getNVDData = () => {
-    return analysisResult?.nvdData || null;
-  };
-
-  const getKEVData = () => {
-    return analysisResult?.kevData || null;
   };
   const getThreatLevel = () => {
     const level = analysisResult?.threatLevel || "LOW";
@@ -1276,33 +1270,45 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 Step-by-step security response plan
               </CardDescription>
 
+              {/* CVE list */}
+              {analysisResult.cveList?.length > 0 && (
+                <div className="mt-2 text-xs sm:text-sm">
+                  <strong>CVE:</strong>{" "}
+                  {analysisResult.cveList.map((cve: string, i: number) => (
+                    <span key={i} className="mr-2 text-blue-600">
+                      {cve}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Confidence + MITRE badge */}
               {analysisResult.confidence !== undefined && (
                 <div className="mt-2 space-y-1 text-xs sm:text-sm">
                   <div>
                     <strong>Confidence:</strong>{" "}
                     <span
                       className={
-                        analysisResult.confidence > 70
+                        analysisResult.confidence === "High"
                           ? "text-red-600"
-                          : analysisResult.confidence > 40
+                          : analysisResult.confidence === "Medium"
                             ? "text-yellow-500"
                             : "text-green-600"
                       }
                     >
-                      {analysisResult.confidence}%
+                      {analysisResult.confidence}
                     </span>
                   </div>
-
-                  {analysisResult.mitre && (
+                  {analysisResult.mitreTechnique && (
                     <div>
-                      <strong>MITRE:</strong> [{analysisResult.mitre.technique}]{" "}
-                      {analysisResult.mitre.name}
+                      <strong>MITRE Technique:</strong>{" "}
+                      {analysisResult.mitreTechnique}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* 🔥 OPTIONAL: REASONING */}
+              {/* Reasoning box */}
               {analysisResult.reasoning && (
                 <div className="mt-2 p-2 rounded bg-muted text-xs whitespace-pre-wrap">
                   <strong>Reason:</strong>
@@ -1311,67 +1317,70 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 </div>
               )}
             </CardHeader>
+
             <CardContent>
-              <ul className="space-y-2">
-                {analysisResult.mitigationActions ? (
-                  analysisResult.mitigationActions.map(
-                    (action: string, index: number) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <Badge className="mt-0.5 text-xs">{index + 1}</Badge>
-                        <span className="text-xs sm:text-sm">{action}</span>
+              {/*
+                ✅ FIXED CONDITION:
+                Use Array.isArray guard so an empty array doesn't
+                accidentally fall through to the mock list.
+              */}
+              {Array.isArray(analysisResult.mitreMitigations) &&
+              analysisResult.mitreMitigations.length > 0 ? (
+                <ul className="space-y-3">
+                  {analysisResult.mitreMitigations.map(
+                    (m: any, index: number) => (
+                      <li
+                        key={m.id ?? index}
+                        className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40"
+                      >
+                        {/* Step number badge */}
+                        <Badge className="mt-0.5 text-xs shrink-0">
+                          {index + 1}
+                        </Badge>
+
+                        <div className="space-y-1 min-w-0">
+                          {/* Mitigation name + MITRE/NIST ID */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs sm:text-sm font-semibold">
+                              {m.name}
+                            </span>
+                            {m.id && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs font-mono"
+                              >
+                                {m.id}
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Description */}
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            {m.description}
+                          </p>
+
+                          {/* Framework tag */}
+                          {m.framework && (
+                            <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                              {m.framework}
+                            </span>
+                          )}
+                        </div>
                       </li>
                     ),
-                  )
-                ) : (
-                  <>
-                    {threatStats.malicious > 0 && (
-                      <>
-                        <li className="flex items-start gap-2">
-                          <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mt-0.5 shrink-0" />
-                          <span className="text-xs sm:text-sm">
-                            Immediately block the analyzed indicator in your
-                            firewall and security systems
-                          </span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mt-0.5 shrink-0" />
-                          <span className="text-xs sm:text-sm">
-                            Conduct forensic analysis if this indicator was
-                            accessed within your network
-                          </span>
-                        </li>
-                      </>
-                    )}
-                    <li className="flex items-start gap-2">
-                      <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-0.5 shrink-0" />
-                      <span className="text-xs sm:text-sm">
-                        Update threat intelligence feeds with the identified
-                        indicators of compromise
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-0.5 shrink-0" />
-                      <span className="text-xs sm:text-sm">
-                        Monitor network logs for any similar patterns or related
-                        threats
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-0.5 shrink-0" />
-                      <span className="text-xs sm:text-sm">
-                        Document findings and share with your security team
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Network className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-0.5 shrink-0" />
-                      <span className="text-xs sm:text-sm">
-                        Review related infrastructure and check for lateral
-                        movement indicators
-                      </span>
-                    </li>
-                  </>
-                )}
-              </ul>
+                  )}
+                </ul>
+              ) : (
+                // ── Fallback: only shown when backend returns nothing ──
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-yellow-200 bg-yellow-50 text-yellow-800 text-xs sm:text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>
+                    No specific mitigations returned from the analysis pipeline.
+                    Ensure the backend <code>mitreMitigations</code> field is
+                    populated and check the server console log.
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
