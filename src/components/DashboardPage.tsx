@@ -303,6 +303,8 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
             null,
 
            recent_reports: normalizedAbuse.recent_reports ?? [],
+
+           abuse_categories: normalizedAbuse.abuse_categories ?? [],
           },
         };
         } catch (err) {
@@ -448,6 +450,15 @@ const getAbuseIPData = () => {
   };
 };
   const abuse = getAbuseIPData();
+
+  const categoryMap =
+  analysisResult?.abuseData?.data?.abuse_categories?.reduce(
+    (acc: any, cat: any) => {
+      acc[cat.id] = cat.name;
+      return acc;
+    },
+    {}
+  ) || {};
 
   const getMISPData = () => {
     if (!analysisResult?.mispData) return null;
@@ -1013,14 +1024,27 @@ const getAbuseIPData = () => {
                         key={index}
                         className="p-3 rounded-lg border bg-muted/40 text-sm"
                       >
+
+                      <p className="text-xs font-semibold">Reported at:</p> 
                       <p className="font-semibold">
                         {new Date(report.reported_at).toLocaleString()}
                       </p>
-
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {report.categories?.map((catId: number, i: number) => (
+                          <span
+                            key={i}
+                            className="px-2 py-1 text-xs rounded-md bg-blue-100 text-blue-700 border"
+                          >
+                          {categoryMap[catId] || `Unknown (${catId})`}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-xs font-semibold">Comment:</p>
                       <p className="text-muted-foreground mt-1">
                         {report.comment || "No comment"}
                       </p>
                       </div>
+                      
                     ))}
                     </div>
                   )}
