@@ -62,6 +62,7 @@ interface DashboardPageProps {
 }
 
 export function DashboardPage({ accessToken }: DashboardPageProps) {
+
   const [analysisValue, setAnalysisValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
@@ -165,7 +166,8 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
 
       console.log("CHAT API:", chatData);
       console.log("UNIFIED API:", apiData);
-
+      console.log(chatData);
+      
       if (chatData?.success) {
         finalResult.aiAnalysis          = chatData.aiAnalysis;
         finalResult.vtData              = chatData.vtData;
@@ -189,7 +191,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.nvdData = chatData.nvdData;
         finalResult.virusTotalIntel = chatData.virusTotalIntel ?? null;
       }
-
+      console.log(finalResult.virusTotalIntel);
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
       if (apiData) {
         finalResult.stats = apiData.stats;
@@ -248,7 +250,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
           console.error("Abuse fetch failed, fallback to existing:", err);
         }
       }
-
+      finalResult.analyzedType = type;
       // ✅ 6. SET FINAL RESULT
       setAnalysisResult(finalResult);
 
@@ -443,6 +445,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
   };
   console.log("MISP FULL:", getMISPData());
   console.log("MISP TAGS:", getMISPData()?.tags);
+  
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       <div>
@@ -720,286 +723,304 @@ ${JSON.stringify(result.abuseData, null, 2)}
             </Card>
           </div>
           
-          {/* VirusTotal Intel Card */}
-          {analysisResult.virusTotalIntel && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" style={{ color: "#ef4444" }} />
-                  <CardTitle className="text-base sm:text-lg">
-                    VirusTotal File Intelligence
-                  </CardTitle>
-                </div>
-                <CardDescription className="text-xs sm:text-sm">
-                  Detailed file analysis and threat classification
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* ── File Metadata ── */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="rounded-lg border p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">File Name</p>
-                    <p className="text-sm font-semibold truncate">
-                      {analysisResult.virusTotalIntel.meaningful_name ?? "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">File Type</p>
-                    <p className="text-sm font-semibold">
-                      {analysisResult.virusTotalIntel.type_description ?? "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">File Size</p>
-                    <p className="text-sm font-semibold">
-                      {analysisResult.virusTotalIntel.file_size
-                        ? `${(analysisResult.virusTotalIntel.file_size / 1024 / 1024).toFixed(2)} MB`
-                        : "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">Detection Rate</p>
-                    <p
-                      className="text-sm font-semibold"
-                      style={{ color: "var(--destructive)" }}
-                    >
-                      {analysisResult.virusTotalIntel.detection_summary?.detection_rate ?? "-"}
-                    </p>
-                  </div>
-                </div>
+          {/* VirusTotal Intel Card — adaptif berdasarkan tipe input */}
+          {analysisResult.virusTotalIntel && (() => {
+            const intel = analysisResult.virusTotalIntel;
+            const isFile = ["hash-md5", "hash-sha1", "hash-sha256"].includes(detectedType) ||
+              // fallback: jika ada file_size atau meaningful_name berarti file
+              intel.meaningful_name || intel.file_size;
+            
+            const currentType = detectedType;
+            const isIP = currentType === "ip";
+            const hasCrowdsource = Array.isArray(intel.crowdsourced_context) && intel.crowdsourced_context.length > 0;
+            const showCveDetected = intel.cve_extracted?.length > 0 && !(isIP && hasCrowdsource);
 
-                {/* ── Hash ── */}
-                <div className="rounded-lg border p-3 space-y-1">
-                  <p className="text-xs text-muted-foreground">Hash</p>
-                  <p className="text-xs font-mono break-all">
-                    {analysisResult.virusTotalIntel.hash}
-                  </p>
-                </div>
+            // label judul indikator sesuai tipe
+            const indicatorLabel: Record<string, string> = {
+              "ip": "IP Address",
+              "domain": "Domain",
+              "url": "URL",
+              "hash-md5": "Hash (MD5)",
+              "hash-sha1": "Hash (SHA1)",
+              "hash-sha256": "Hash (SHA256)",
+              "subnet": "Subnet",
+              "asn": "ASN",
+            };
+            const label = indicatorLabel[detectedType] ?? "Indicator";
 
-                {/* ── Threat Classification ── */}
-                {analysisResult.virusTotalIntel.popular_threat_classification
-                  ?.popular_threat_category && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
-                      Threat Classification
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="destructive" className="text-xs">
-                        {analysisResult.virusTotalIntel.popular_threat_classification.popular_threat_category}
-                      </Badge>
-                      {analysisResult.virusTotalIntel.popular_threat_classification.popular_threat_name?.map(
-                        (name: string, i: number) => (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            {name}
-                          </Badge>
-                        )
-                      )}
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" style={{ color: "#ef4444" }} />
+                    <CardTitle className="text-base sm:text-lg">
+                      VirusTotal Intelligence
+                    </CardTitle>
+                  </div>
+                  <CardDescription className="text-xs sm:text-sm">
+                    Detailed threat analysis and classification
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+
+                  {/* ── Detection Summary ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                    {/* Indicator */}
+                    <div className="rounded-lg border p-3 space-y-1 min-w-0">
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p
+                        className="text-xs font-mono leading-relaxed max-w-full"
+                        style={{ wordBreak: "break-all", overflowWrap: "anywhere" }}
+                      >
+                        {intel.indicator ?? intel.hash ?? "-"}
+                      </p>
                     </div>
                   </div>
-                )}
 
-                {/* ── Tags & CVEs ── */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {analysisResult.virusTotalIntel.tags?.length > 0 && (
+                  {/* ── File Metadata — hanya tampil jika file/hash ── */}
+                  {isFile && (intel.meaningful_name || intel.type_description || intel.file_size) && (
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                      {intel.meaningful_name && (
+                        <div className="rounded-lg border p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">File Name</p>
+                          <p className="text-sm font-semibold truncate">{intel.meaningful_name}</p>
+                        </div>
+                      )}
+                      {intel.type_description && (
+                        <div className="rounded-lg border p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">File Type</p>
+                          <p className="text-sm font-semibold">{intel.type_description}</p>
+                        </div>
+                      )}
+                      {intel.file_size && (
+                        <div className="rounded-lg border p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">File Size</p>
+                          <p className="text-sm font-semibold">
+                            {(intel.file_size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Threat Classification ── */}
+                  {intel.popular_threat_classification?.popular_threat_category && (
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
-                        Tags
+                        Threat Classification
                       </p>
-                      <div className="flex flex-wrap gap-1">
-                        {analysisResult.virusTotalIntel.tags.map(
-                          (tag: string, i: number) => (
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="destructive" className="text-xs">
+                          {intel.popular_threat_classification.popular_threat_category}
+                        </Badge>
+                        {intel.popular_threat_classification.popular_threat_name?.map(
+                          (name: string, i: number) => (
+                            <Badge key={i} variant="outline" className="text-xs">{name}</Badge>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Tags & CVEs ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {intel.tags?.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                          Tags
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {intel.tags.map((tag: string, i: number) => (
                             <span
                               key={i}
                               className="px-2 py-0.5 text-xs rounded-md bg-slate-100 text-slate-700 border"
                             >
                               {tag}
                             </span>
-                          )
-                        )}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {analysisResult.virusTotalIntel.cve_extracted?.length > 0 && (
+                    {showCveDetected && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                          CVEs Detected
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {intel.cve_extracted.map((cve: string, i: number) => {
+                            const nvdUrl = "https://nvd.nist.gov/vuln/detail/" + cve;
+                            return (
+                              <a
+                                key={i}
+                                href={nvdUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-0.5 text-xs rounded-md bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
+                              >
+                                {cve}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Crowdsourced Context (IP/domain — mirip screenshot VT) ── */}
+                  {intel.crowdsourced_context?.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
-                        CVEs Detected
+                        Crowdsourced Context
                       </p>
-                      <div className="flex flex-wrap gap-1">
-                        {analysisResult.virusTotalIntel.cve_extracted.map(
-                          (cve: string, i: number) => (
-                            <a
-                              key={i}
-                              href={`https://nvd.nist.gov/vuln/detail/${cve}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2 py-0.5 text-xs rounded-md bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
-                            >
-                              {cve}
-                            </a>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Behavior Summary ── */}
-                {analysisResult.virusTotalIntel.behavior_summary && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
-                      Behavior Summary
-                    </p>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                      {/* Network */}
-                      {analysisResult.virusTotalIntel.behavior_summary.network_communications?.length > 0 && (
-                        <div className="rounded-lg border p-3 space-y-2">
-                          <p className="text-xs font-semibold flex items-center gap-1">
-                            <Globe className="h-3 w-3" /> Network Communications
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {analysisResult.virusTotalIntel.behavior_summary.network_communications.map(
-                              (n: string, i: number) => (
-                                <span
-                                  key={i}
-                                  className="px-2 py-0.5 text-xs rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono"
-                                >
-                                  {n}
-                                </span>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Dropped Files */}
-                      {analysisResult.virusTotalIntel.behavior_summary.drops_files?.length > 0 && (
-                        <div className="rounded-lg border p-3 space-y-2">
-                          <p className="text-xs font-semibold">📁 Dropped Files</p>
-                          <ul className="space-y-1">
-                            {analysisResult.virusTotalIntel.behavior_summary.drops_files.map(
-                              (f: string, i: number) => (
-                                <li
-                                  key={i}
-                                  className="text-xs font-mono text-orange-700 bg-orange-50 px-2 py-0.5 rounded"
-                                >
-                                  {f}
-                                </li>
-                              )
-                            )}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Registry */}
-                      {analysisResult.virusTotalIntel.behavior_summary.registry_modifications?.length > 0 && (
-                        <div className="rounded-lg border p-3 space-y-2">
-                          <p className="text-xs font-semibold">🔑 Registry Modifications</p>
-                          <ul className="space-y-1">
-                            {analysisResult.virusTotalIntel.behavior_summary.registry_modifications.map(
-                              (r: string, i: number) => (
-                                <li
-                                  key={i}
-                                  className="text-xs font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded break-all"
-                                >
-                                  {r}
-                                </li>
-                              )
-                            )}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Processes */}
-                      {analysisResult.virusTotalIntel.behavior_summary.processes_created?.length > 0 && (
-                        <div className="rounded-lg border p-3 space-y-2">
-                          <p className="text-xs font-semibold">⚙️ Processes Created</p>
-                          <ul className="space-y-1">
-                            {analysisResult.virusTotalIntel.behavior_summary.processes_created.map(
-                              (p: string, i: number) => (
-                                <li
-                                  key={i}
-                                  className="text-xs font-mono text-gray-700 bg-gray-50 px-2 py-0.5 rounded break-all"
-                                >
-                                  {p}
-                                </li>
-                              )
-                            )}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Files Encrypted + Mutex */}
-                    <div className="flex flex-wrap gap-3">
-                      <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
-                        <span className="text-xs text-muted-foreground">Files Encrypted:</span>
-                        <Badge
-                          variant={
-                            analysisResult.virusTotalIntel.behavior_summary.files_encrypted
-                              ? "destructive"
-                              : "secondary"
-                          }
-                          className="text-xs"
-                        >
-                          {analysisResult.virusTotalIntel.behavior_summary.files_encrypted
-                            ? "YES"
-                            : "NO"}
-                        </Badge>
-                      </div>
-
-                      {analysisResult.virusTotalIntel.behavior_summary.mutex_created && (
-                        <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
-                          <span className="text-xs text-muted-foreground">Mutex:</span>
-                          <span className="text-xs font-mono">
-                            {analysisResult.virusTotalIntel.behavior_summary.mutex_created}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Sigma / IDS Rules ── */}
-                {analysisResult.virusTotalIntel.sigma_analysis_results?.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
-                      IDS / Sigma Rules Matched
-                    </p>
-                    <div className="space-y-2">
-                      {analysisResult.virusTotalIntel.sigma_analysis_results.map(
-                        (rule: any, i: number) => (
+                      <div className="space-y-2">
+                        {intel.crowdsourced_context.map((ctx: any, i: number) => (
                           <div
                             key={i}
-                            className="flex items-center justify-between rounded-lg border p-3"
+                            className="flex items-start justify-between rounded-lg border p-3 gap-3"
                           >
-                            <div>
-                              <p className="text-xs font-semibold">{rule.rule_title}</p>
-                              <p className="text-xs text-muted-foreground font-mono">
-                                {rule.rule_id}
-                              </p>
+                            <div className="space-y-1 flex-1">
+                              <p className="text-xs">{ctx.detail}</p>
+                              {ctx.source && (
+                                <p className="text-xs text-muted-foreground">
+                                  Source: {ctx.source}
+                                </p>
+                              )}
+                              {ctx.cve?.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {ctx.cve.map((cve: string, j: number) => {
+                                    const url = "https://nvd.nist.gov/vuln/detail/" + cve;
+                                    return (
+                                      <a
+                                        key={j}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
+                                      >
+                                        {cve}
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                             <Badge
                               variant={
-                                rule.severity === "CRITICAL" || rule.severity === "HIGH"
+                                ctx.severity === "HIGH" || ctx.severity === "CRITICAL"
                                   ? "destructive"
-                                  : rule.severity === "MEDIUM"
+                                  : ctx.severity === "MEDIUM"
                                   ? "default"
                                   : "secondary"
                               }
+                              className="text-xs shrink-0"
+                            >
+                              {ctx.severity}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Behavior Summary — hanya untuk file ── */}
+                  {isFile && intel.behavior_summary && (
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                        Behavior Summary
+                      </p>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        {intel.behavior_summary.network_communications?.length > 0 && (
+                          <div className="rounded-lg border p-3 space-y-2">
+                            <p className="text-xs font-semibold flex items-center gap-1">
+                              <Globe className="h-3 w-3" /> Network Communications
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {intel.behavior_summary.network_communications.map((n: string, i: number) => (
+                                <span key={i} className="px-2 py-0.5 text-xs rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono">
+                                  {n}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {intel.behavior_summary.drops_files?.length > 0 && (
+                          <div className="rounded-lg border p-3 space-y-2">
+                            <p className="text-xs font-semibold">📁 Dropped Files</p>
+                            <ul className="space-y-1">
+                              {intel.behavior_summary.drops_files.map((f: string, i: number) => (
+                                <li key={i} className="text-xs font-mono text-orange-700 bg-orange-50 px-2 py-0.5 rounded">{f}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {intel.behavior_summary.registry_modifications?.length > 0 && (
+                          <div className="rounded-lg border p-3 space-y-2">
+                            <p className="text-xs font-semibold">🔑 Registry Modifications</p>
+                            <ul className="space-y-1">
+                              {intel.behavior_summary.registry_modifications.map((r: string, i: number) => (
+                                <li key={i} className="text-xs font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded break-all">{r}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {intel.behavior_summary.processes_created?.length > 0 && (
+                          <div className="rounded-lg border p-3 space-y-2">
+                            <p className="text-xs font-semibold">⚙️ Processes Created</p>
+                            <ul className="space-y-1">
+                              {intel.behavior_summary.processes_created.map((p: string, i: number) => (
+                                <li key={i} className="text-xs font-mono text-gray-700 bg-gray-50 px-2 py-0.5 rounded break-all">{p}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                          <span className="text-xs text-muted-foreground">Files Encrypted:</span>
+                          <Badge variant={intel.behavior_summary.files_encrypted ? "destructive" : "secondary"} className="text-xs">
+                            {intel.behavior_summary.files_encrypted ? "YES" : "NO"}
+                          </Badge>
+                        </div>
+                        {intel.behavior_summary.mutex_created && (
+                          <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                            <span className="text-xs text-muted-foreground">Mutex:</span>
+                            <span className="text-xs font-mono">{intel.behavior_summary.mutex_created}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Sigma / IDS Rules — hanya untuk file ── */}
+                  {isFile && intel.sigma_analysis_results?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                        IDS / Sigma Rules Matched
+                      </p>
+                      <div className="space-y-2">
+                        {intel.sigma_analysis_results.map((rule: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between rounded-lg border p-3">
+                            <div>
+                              <p className="text-xs font-semibold">{rule.rule_title}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{rule.rule_id}</p>
+                            </div>
+                            <Badge
+                              variant={rule.severity === "CRITICAL" || rule.severity === "HIGH" ? "destructive" : rule.severity === "MEDIUM" ? "default" : "secondary"}
                               className="text-xs"
                             >
                               {rule.severity}
                             </Badge>
                           </div>
-                        )
-                      )}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  )}
+
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* 7. Security Vendor Analysis */}
           <Card>
