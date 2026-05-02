@@ -160,6 +160,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       ]);
 
       const chatData = await chatRes.json();
+      console.log(analysisResult);
       const apiData = await apiRes.json();
 
       console.log("CHAT API:", chatData);
@@ -171,23 +172,22 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.abuseData           = chatData.abuseData;
         finalResult.mispData            = chatData.mispData;
         finalResult.correlationInsights = chatData.correlationInsights;
-        finalResult.confidence          = chatData.confidence;
-        finalResult.reasoning           = chatData.reasoning;
-        finalResult.cve                 = chatData.cve;
-        finalResult.cwe                 = chatData.cwe;
-
+        finalResult.confidence = chatData.confidence;
+        finalResult.reasoning = chatData.reasoning;
+        finalResult.cve = chatData.cve;
+        finalResult.cwe = chatData.cwe;
         // Flat string for the MITRE Technique label
         finalResult.mitreTechnique = chatData.mitreTechnique ?? null;
-
         // ✅ Full objects array — THIS is what the card renders
         finalResult.mitreMitigations = Array.isArray(chatData.mitreMitigations)
           ? chatData.mitreMitigations
           : [];
-
         finalResult.mitigationActions = finalResult.mitreMitigations.map(
-          (m: any) => m.name
+          (m: any) => m.name,
         );
         finalResult.mitigationDetails = finalResult.mitreMitigations;
+        finalResult.nvdData = chatData.nvdData;
+        finalResult.virusTotalIntel = chatData.virusTotalIntel ?? null;
       }
 
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
@@ -398,36 +398,37 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
   const threatLevel = getThreatLevel();
 
-  // Correlation data for radar chart
-  const getCorrelationData = () => {
+  const getCorrelationScores = () => {
+    const vtRatio = threatStats.malicious / Math.max(totalVendors, 1);
+    const abuse = getAbuseIPData()?.abuseConfidenceScore || 0;
     const misp = getMISPData();
 
+    const mispScore =
+      (misp?.matchCount || 0) * 15 +
+      (misp?.confidence === "High"
+        ? 30
+        : misp?.confidence === "Medium"
+          ? 15
+          : 5);
+
+    return {
+      malware: vtRatio * 100,
+      reputation: abuse,
+      intel: Math.min(mispScore, 100),
+      confidence: vtRatio * 40 + (abuse / 100) * 30 + (mispScore / 100) * 30,
+    };
+  };
+
+  // Correlation data for radar chart
+  const getCorrelationData = () => {
+    const scores = getCorrelationScores();
+
     return [
-      {
-        metric: "Malware",
-        score: (threatStats.malicious / Math.max(totalVendors, 1)) * 100,
-      },
-      {
-        metric: "Reputation",
-        score: 100 - (getAbuseIPData()?.abuseConfidenceScore || 0),
-      },
-      {
-        metric: "Intel",
-        score: Math.min((misp?.matchCount || 0) * 20, 100),
-      },
-      {
-        metric: "Confidence",
-        score:
-          misp?.confidence === "High"
-            ? 95
-            : misp?.confidence === "Medium"
-              ? 65
-              : 30,
-      },
-      {
-        metric: "History",
-        score: misp?.lastSeen && misp?.lastSeen !== "-" ? 80 : 40,
-      },
+      { metric: "Malware", score: scores.malware },
+      { metric: "Reputation", score: scores.reputation },
+      { metric: "Intel", score: scores.intel },
+      { metric: "Confidence", score: scores.confidence },
+      { metric: "History", score: scores.intel * 0.8 },
     ];
   };
 
@@ -718,6 +719,287 @@ ${JSON.stringify(result.abuseData, null, 2)}
               </CardContent>
             </Card>
           </div>
+          
+          {/* VirusTotal Intel Card */}
+          {analysisResult.virusTotalIntel && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" style={{ color: "#ef4444" }} />
+                  <CardTitle className="text-base sm:text-lg">
+                    VirusTotal File Intelligence
+                  </CardTitle>
+                </div>
+                <CardDescription className="text-xs sm:text-sm">
+                  Detailed file analysis and threat classification
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* ── File Metadata ── */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">File Name</p>
+                    <p className="text-sm font-semibold truncate">
+                      {analysisResult.virusTotalIntel.meaningful_name ?? "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">File Type</p>
+                    <p className="text-sm font-semibold">
+                      {analysisResult.virusTotalIntel.type_description ?? "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">File Size</p>
+                    <p className="text-sm font-semibold">
+                      {analysisResult.virusTotalIntel.file_size
+                        ? `${(analysisResult.virusTotalIntel.file_size / 1024 / 1024).toFixed(2)} MB`
+                        : "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">Detection Rate</p>
+                    <p
+                      className="text-sm font-semibold"
+                      style={{ color: "var(--destructive)" }}
+                    >
+                      {analysisResult.virusTotalIntel.detection_summary?.detection_rate ?? "-"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* ── Hash ── */}
+                <div className="rounded-lg border p-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">Hash</p>
+                  <p className="text-xs font-mono break-all">
+                    {analysisResult.virusTotalIntel.hash}
+                  </p>
+                </div>
+
+                {/* ── Threat Classification ── */}
+                {analysisResult.virusTotalIntel.popular_threat_classification
+                  ?.popular_threat_category && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                      Threat Classification
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="destructive" className="text-xs">
+                        {analysisResult.virusTotalIntel.popular_threat_classification.popular_threat_category}
+                      </Badge>
+                      {analysisResult.virusTotalIntel.popular_threat_classification.popular_threat_name?.map(
+                        (name: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs">
+                            {name}
+                          </Badge>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Tags & CVEs ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {analysisResult.virusTotalIntel.tags?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                        Tags
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {analysisResult.virusTotalIntel.tags.map(
+                          (tag: string, i: number) => (
+                            <span
+                              key={i}
+                              className="px-2 py-0.5 text-xs rounded-md bg-slate-100 text-slate-700 border"
+                            >
+                              {tag}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {analysisResult.virusTotalIntel.cve_extracted?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                        CVEs Detected
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {analysisResult.virusTotalIntel.cve_extracted.map(
+                          (cve: string, i: number) => (
+                            <a
+                              key={i}
+                              href={`https://nvd.nist.gov/vuln/detail/${cve}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-0.5 text-xs rounded-md bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
+                            >
+                              {cve}
+                            </a>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Behavior Summary ── */}
+                {analysisResult.virusTotalIntel.behavior_summary && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                      Behavior Summary
+                    </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {/* Network */}
+                      {analysisResult.virusTotalIntel.behavior_summary.network_communications?.length > 0 && (
+                        <div className="rounded-lg border p-3 space-y-2">
+                          <p className="text-xs font-semibold flex items-center gap-1">
+                            <Globe className="h-3 w-3" /> Network Communications
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {analysisResult.virusTotalIntel.behavior_summary.network_communications.map(
+                              (n: string, i: number) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 text-xs rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono"
+                                >
+                                  {n}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Dropped Files */}
+                      {analysisResult.virusTotalIntel.behavior_summary.drops_files?.length > 0 && (
+                        <div className="rounded-lg border p-3 space-y-2">
+                          <p className="text-xs font-semibold">📁 Dropped Files</p>
+                          <ul className="space-y-1">
+                            {analysisResult.virusTotalIntel.behavior_summary.drops_files.map(
+                              (f: string, i: number) => (
+                                <li
+                                  key={i}
+                                  className="text-xs font-mono text-orange-700 bg-orange-50 px-2 py-0.5 rounded"
+                                >
+                                  {f}
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Registry */}
+                      {analysisResult.virusTotalIntel.behavior_summary.registry_modifications?.length > 0 && (
+                        <div className="rounded-lg border p-3 space-y-2">
+                          <p className="text-xs font-semibold">🔑 Registry Modifications</p>
+                          <ul className="space-y-1">
+                            {analysisResult.virusTotalIntel.behavior_summary.registry_modifications.map(
+                              (r: string, i: number) => (
+                                <li
+                                  key={i}
+                                  className="text-xs font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded break-all"
+                                >
+                                  {r}
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Processes */}
+                      {analysisResult.virusTotalIntel.behavior_summary.processes_created?.length > 0 && (
+                        <div className="rounded-lg border p-3 space-y-2">
+                          <p className="text-xs font-semibold">⚙️ Processes Created</p>
+                          <ul className="space-y-1">
+                            {analysisResult.virusTotalIntel.behavior_summary.processes_created.map(
+                              (p: string, i: number) => (
+                                <li
+                                  key={i}
+                                  className="text-xs font-mono text-gray-700 bg-gray-50 px-2 py-0.5 rounded break-all"
+                                >
+                                  {p}
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Files Encrypted + Mutex */}
+                    <div className="flex flex-wrap gap-3">
+                      <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                        <span className="text-xs text-muted-foreground">Files Encrypted:</span>
+                        <Badge
+                          variant={
+                            analysisResult.virusTotalIntel.behavior_summary.files_encrypted
+                              ? "destructive"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {analysisResult.virusTotalIntel.behavior_summary.files_encrypted
+                            ? "YES"
+                            : "NO"}
+                        </Badge>
+                      </div>
+
+                      {analysisResult.virusTotalIntel.behavior_summary.mutex_created && (
+                        <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                          <span className="text-xs text-muted-foreground">Mutex:</span>
+                          <span className="text-xs font-mono">
+                            {analysisResult.virusTotalIntel.behavior_summary.mutex_created}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Sigma / IDS Rules ── */}
+                {analysisResult.virusTotalIntel.sigma_analysis_results?.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                      IDS / Sigma Rules Matched
+                    </p>
+                    <div className="space-y-2">
+                      {analysisResult.virusTotalIntel.sigma_analysis_results.map(
+                        (rule: any, i: number) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between rounded-lg border p-3"
+                          >
+                            <div>
+                              <p className="text-xs font-semibold">{rule.rule_title}</p>
+                              <p className="text-xs text-muted-foreground font-mono">
+                                {rule.rule_id}
+                              </p>
+                            </div>
+                            <Badge
+                              variant={
+                                rule.severity === "CRITICAL" || rule.severity === "HIGH"
+                                  ? "destructive"
+                                  : rule.severity === "MEDIUM"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {rule.severity}
+                            </Badge>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* 7. Security Vendor Analysis */}
           <Card>
@@ -1004,6 +1286,116 @@ ${JSON.stringify(result.abuseData, null, 2)}
             </Card>
           )}
 
+          {/*Product Detection*/}
+          {/* <Card>
+            <CardHeader>
+              <CardTitle>Technology Detection</CardTitle>
+              <CardDescription>
+                Fingerprint from Shodan / Censys
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Product</p>
+                  <p className="text-xl font-bold">
+                    {analysisResult?.detectedProduct || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-muted-foreground">Version</p>
+                  <p className="text-xl font-bold">
+                    {analysisResult?.detectedVersion || "-"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card> */}
+          {/*Censys Data*/}
+          {/* {getCensysData() && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Censys Exposure Intelligence</CardTitle>
+                <CardDescription>Internet exposed services</CardDescription>
+              </CardHeader>
+
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Services</p>
+                    <p className="text-2xl font-bold">
+                      {getCensysData()?.services?.length || 0}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">Country</p>
+                    <p className="text-2xl font-bold">
+                      {getCensysData()?.location?.country || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">ASN</p>
+                    <p className="text-base font-semibold">
+                      {getCensysData()?.autonomous_system?.name || "-"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )} */}
+          {/*NVD Data & Kev*/}
+          {/* {getNVDData() && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Vulnerability Intelligence</CardTitle>
+                <CardDescription>
+                  NVD + CISA Known Exploited Vulnerabilities
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">CVE Count</p>
+                    <p className="text-2xl font-bold">
+                      {getNVDData()?.vulnerabilities?.length || 0}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">KEV Status</p>
+
+                    <Badge
+                      variant={
+                        getKEVData()?.exploited ? "destructive" : "secondary"
+                      }
+                    >
+                      {getKEVData()?.exploited
+                        ? "Known Exploited"
+                        : "Not Listed"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {getNVDData()
+                  ?.vulnerabilities?.slice(0, 3)
+                  .map((item: any, i: number) => (
+                    <div key={i} className="border rounded p-3">
+                      <p className="font-semibold">{item.cve?.id}</p>
+
+                      <p className="text-sm text-muted-foreground">
+                        {item.cve?.descriptions?.[0]?.value?.slice(0, 160)}...
+                      </p>
+                    </div>
+                  ))}
+              </CardContent>
+            </Card>
+          )} */}
+
           {/* 9. Threat Correlation Engine */}
           <Card>
             <CardHeader>
@@ -1054,51 +1446,11 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     Correlation Insights
                   </h4>
                   <div className="space-y-2 text-xs sm:text-sm">
-                    {analysisResult.correlationInsights ? (
-                      <div className="p-3 rounded-lg bg-muted">
-                        <p className="whitespace-pre-wrap">
-                          {analysisResult.correlationInsights}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            VT
-                          </Badge>
-                          <span>
-                            VirusTotal detected {threatStats.malicious}{" "}
-                            malicious vendors
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            Abuse
-                          </Badge>
-                          <span>
-                            AbuseIPDB confidence:{" "}
-                            {getAbuseIPData()?.abuseConfidenceScore || 0}%
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            Geo
-                          </Badge>
-                          <span>
-                            Origin: {getAbuseIPData()?.countryCode || "Unknown"}
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2 p-2 rounded bg-muted">
-                          <Badge variant="outline" className="text-xs">
-                            History
-                          </Badge>
-                          <span>
-                            {getAbuseIPData()?.totalReports || 0} abuse reports
-                            filed
-                          </span>
-                        </div>
-                      </>
-                    )}
+                    <div className="p-3 rounded-lg bg-muted">
+                      <p className="whitespace-pre-wrap">
+                        {analysisResult.correlationInsights}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1162,7 +1514,9 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 <div className="mt-2 text-xs sm:text-sm">
                   <strong>CVE:</strong>{" "}
                   {analysisResult.cveList.map((cve: string, i: number) => (
-                    <span key={i} className="mr-2 text-blue-600">{cve}</span>
+                    <span key={i} className="mr-2 text-blue-600">
+                      {cve}
+                    </span>
                   ))}
                 </div>
               )}
@@ -1177,8 +1531,8 @@ ${JSON.stringify(result.abuseData, null, 2)}
                         analysisResult.confidence === "High"
                           ? "text-red-600"
                           : analysisResult.confidence === "Medium"
-                          ? "text-yellow-500"
-                          : "text-green-600"
+                            ? "text-yellow-500"
+                            : "text-green-600"
                       }
                     >
                       {analysisResult.confidence}
@@ -1212,43 +1566,48 @@ ${JSON.stringify(result.abuseData, null, 2)}
               {Array.isArray(analysisResult.mitreMitigations) &&
               analysisResult.mitreMitigations.length > 0 ? (
                 <ul className="space-y-3">
-                  {analysisResult.mitreMitigations.map((m: any, index: number) => (
-                    <li
-                      key={m.id ?? index}
-                      className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40"
-                    >
-                      {/* Step number badge */}
-                      <Badge className="mt-0.5 text-xs shrink-0">
-                        {index + 1}
-                      </Badge>
+                  {analysisResult.mitreMitigations.map(
+                    (m: any, index: number) => (
+                      <li
+                        key={m.id ?? index}
+                        className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40"
+                      >
+                        {/* Step number badge */}
+                        <Badge className="mt-0.5 text-xs shrink-0">
+                          {index + 1}
+                        </Badge>
 
-                      <div className="space-y-1 min-w-0">
-                        {/* Mitigation name + MITRE/NIST ID */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs sm:text-sm font-semibold">
-                            {m.name}
-                          </span>
-                          {m.id && (
-                            <Badge variant="outline" className="text-xs font-mono">
-                              {m.id}
-                            </Badge>
+                        <div className="space-y-1 min-w-0">
+                          {/* Mitigation name + MITRE/NIST ID */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs sm:text-sm font-semibold">
+                              {m.name}
+                            </span>
+                            {m.id && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs font-mono"
+                              >
+                                {m.id}
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Description */}
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            {m.description}
+                          </p>
+
+                          {/* Framework tag */}
+                          {m.framework && (
+                            <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                              {m.framework}
+                            </span>
                           )}
                         </div>
-
-                        {/* Description */}
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {m.description}
-                        </p>
-
-                        {/* Framework tag */}
-                        {m.framework && (
-                          <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                            {m.framework}
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    ),
+                  )}
                 </ul>
               ) : (
                 // ── Fallback: only shown when backend returns nothing ──
