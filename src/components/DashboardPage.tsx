@@ -1025,7 +1025,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     )}
 
                     {/* ── Behavior Summary — hanya untuk file ── */}
-                    {isFile && intel.behavior_summary && (
+                    {/* {isFile && intel.behavior_summary && (
                       <div className="space-y-3">
                         <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
                           Behavior Summary
@@ -1142,7 +1142,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                           )}
                         </div>
                       </div>
-                    )}
+                    )} */}
 
                     {/* ── Sigma / IDS Rules — hanya untuk file ── */}
                     {isFile && intel.sigma_analysis_results?.length > 0 && (
