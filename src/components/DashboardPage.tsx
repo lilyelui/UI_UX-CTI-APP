@@ -58,6 +58,21 @@ import {
 } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import ReactMarkdown from "react-markdown";
+
+function getUserFromToken(token: string): { username: string; email: string } {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return {
+      email: payload.email ?? "unknown@-",
+      username:
+        payload.user_metadata?.full_name ??
+        payload.email?.split("@")[0] ??
+        "Unknown",
+    };
+  } catch {
+    return { username: "Unknown", email: "unknown@-" };
+  }
+}
 interface DashboardPageProps {
   accessToken: string;
 }
@@ -136,7 +151,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
     try {
       // ✅ 1. START DARI MOCK (biar UI tetap tampil dulu)
       let finalResult: any = {};
-
+      const { username, email } = getUserFromToken(accessToken);
       // 🔥 2. FETCH API PARALLEL
       const [chatRes, apiRes] = await Promise.all([
         fetch("http://localhost:5000/chat", {
@@ -147,6 +162,8 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
           body: JSON.stringify({
             indicator: analysisValue,
             type,
+            username, // ← TAMBAH
+            email, // ← TAMBAH
           }),
         }),
         fetch("http://localhost:5000/api/analyze", {
