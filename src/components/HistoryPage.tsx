@@ -1,29 +1,46 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "./ui/card";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "./ui/table";
-import { Button }  from "./ui/button";
-import { Input }   from "./ui/input";
-import { Badge }   from "./ui/badge";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Badge } from "./ui/badge";
 import {
-  Download, Loader2, FileText, Search, RefreshCw,
-  FileDown, ChevronLeft, ChevronRight, Wifi, WifiOff,
+  Download,
+  Loader2,
+  FileText,
+  Search,
+  RefreshCw,
+  FileDown,
+  ChevronLeft,
+  ChevronRight,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 
 /* ── Types ── */
 interface HistoryEntry {
-  reportId:    string;
-  username:    string;
-  email:       string;
-  ioc:         string;
-  iocType:     string;
+  reportId: string;
+  username: string;
+  email: string;
+  ioc: string;
+  iocType: string;
   threatLevel: string;
-  aiAnalysis:  string;
-  createdAt:   string;
+  aiAnalysis: string;
+  createdAt: string;
 }
 
 interface HistoryPageProps {
@@ -31,26 +48,26 @@ interface HistoryPageProps {
 }
 
 /* ── Constants ── */
-const WS_URL        = "ws://localhost:5000/ws";
-const API_BASE      = "http://localhost:5000";
-const PAGE_SIZE     = 10;
+const WS_URL = "ws://localhost:5000/ws";
+const API_BASE = "http://localhost:5000";
+const PAGE_SIZE = 10;
 
 /* ── Helpers ── */
 const threatColor = (level: string) => {
   const l = level?.toUpperCase();
   if (l === "CRITICAL") return "destructive";
-  if (l === "HIGH")     return "destructive";
-  if (l === "MEDIUM")   return "default";
+  if (l === "HIGH") return "destructive";
+  if (l === "MEDIUM") return "default";
   return "secondary";
 };
 
 const typeIcon = (type: string) => {
   if (type?.includes("hash")) return "🔐";
-  if (type === "ip")           return "🌐";
-  if (type === "domain")       return "🔗";
-  if (type === "url")          return "🔒";
-  if (type === "subnet")       return "📡";
-  if (type === "asn")          return "🏢";
+  if (type === "ip") return "🌐";
+  if (type === "domain") return "🔗";
+  if (type === "url") return "🔒";
+  if (type === "subnet") return "📡";
+  if (type === "asn") return "🏢";
   return "🔍";
 };
 
@@ -58,8 +75,8 @@ const typeIcon = (type: string) => {
    COMPONENT
 ════════════════════════════════════ */
 export function HistoryPage({ accessToken }: HistoryPageProps) {
-  const [history,     setHistory]     = useState<HistoryEntry[]>([]);
-  const [loading,     setLoading]     = useState(true);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [wsConnected, setWsConnected] = useState(false);
@@ -71,7 +88,7 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(`${API_BASE}/history`);
+      const res = await fetch(`${API_BASE}/history`);
       const data = await res.json();
       if (data.success) {
         setHistory(data.history);
@@ -148,9 +165,9 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
       if (!res.ok) throw new Error("Export failed");
 
       const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href     = url;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
       a.download = `${entry.reportId}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
@@ -169,21 +186,26 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
     const q = searchQuery.toLowerCase();
     if (!q) return true;
     return (
-      e.reportId.toLowerCase().includes(q)   ||
-      e.username.toLowerCase().includes(q)   ||
-      e.email.toLowerCase().includes(q)      ||
-      e.ioc.toLowerCase().includes(q)        ||
-      e.iocType.toLowerCase().includes(q)    ||
+      e.reportId.toLowerCase().includes(q) ||
+      e.username.toLowerCase().includes(q) ||
+      e.email.toLowerCase().includes(q) ||
+      e.ioc.toLowerCase().includes(q) ||
+      e.iocType.toLowerCase().includes(q) ||
       e.threatLevel.toLowerCase().includes(q)
     );
   });
 
-  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage    = Math.min(currentPage, totalPages);
-  const paginated   = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginated = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   /* Reset to page 1 on search */
-  useEffect(() => { setCurrentPage(1); }, [searchQuery]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   /* ═══════════════════════
      RENDER
@@ -218,9 +240,13 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
             }`}
           >
             {wsConnected ? (
-              <><Wifi className="h-3 w-3" /> Live</>
+              <>
+                <Wifi className="h-3 w-3" /> Live
+              </>
             ) : (
-              <><WifiOff className="h-3 w-3" /> Disconnected</>
+              <>
+                <WifiOff className="h-3 w-3" /> Disconnected
+              </>
             )}
           </span>
           <Button
@@ -229,34 +255,87 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
             onClick={fetchHistory}
             disabled={loading}
           >
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
+      {/* Search */}
+      <div style={{ position: "relative" }}>
+        <Search
+          style={{
+            position: "absolute",
+            left: "12px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: "16px",
+            height: "16px",
+            color: "#9ca3af",
+            pointerEvents: "none",
+          }}
+        />
+        <input
+          type="text"
           placeholder="Search by Report ID, Username, IOC, Type, or Threat Level..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
+          style={{
+            width: "100%",
+            paddingLeft: "40px",
+            paddingRight: searchQuery ? "40px" : "12px",
+            height: "40px",
+            borderRadius: "8px",
+            border: "1px solid #d1d5db",
+            backgroundColor: "#ffffff",
+            fontSize: "14px",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+            outline: "none",
+          }}
+          onFocus={(e) => {
+            e.target.style.border = "1px solid #3b82f6";
+            e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.15)";
+          }}
+          onBlur={(e) => {
+            e.target.style.border = "1px solid #d1d5db";
+            e.target.style.boxShadow = "0 1px 2px rgba(0,0,0,0.05)";
+          }}
         />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            style={{
+              position: "absolute",
+              right: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#9ca3af",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Stats summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Total Reports",  value: history.length },
-          { label: "Filtered",       value: filtered.length },
-          { label: "Critical / High",
+          { label: "Total Reports", value: history.length },
+          { label: "Filtered", value: filtered.length },
+          {
+            label: "Critical / High",
             value: history.filter((e) =>
-              ["CRITICAL","HIGH"].includes(e.threatLevel?.toUpperCase())
+              ["CRITICAL", "HIGH"].includes(e.threatLevel?.toUpperCase()),
             ).length,
           },
-          { label: "This Page",      value: paginated.length },
+          { label: "This Page", value: paginated.length },
         ].map((s) => (
           <Card key={s.label} className="py-3">
             <CardContent className="p-3">
@@ -289,7 +368,9 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
             <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
               <FileText className="h-10 w-10 opacity-40" />
               <p className="text-sm">
-                {searchQuery ? "No results match your search." : "No analysis history yet."}
+                {searchQuery
+                  ? "No results match your search."
+                  : "No analysis history yet."}
               </p>
             </div>
           ) : (
@@ -304,14 +385,16 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                     <TableHead className="text-xs">IOC</TableHead>
                     <TableHead className="text-xs">Type</TableHead>
                     <TableHead className="text-xs">Threat</TableHead>
-                    <TableHead className="text-xs text-center">Actions</TableHead>
+                    <TableHead className="text-xs text-center">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
                   {paginated.map((entry, idx) => {
-                    const rowNum  = (safePage - 1) * PAGE_SIZE + idx + 1;
-                    const pdfKey  = `${entry.reportId}-pdf`;
+                    const rowNum = (safePage - 1) * PAGE_SIZE + idx + 1;
+                    const pdfKey = `${entry.reportId}-pdf`;
                     const docxKey = `${entry.reportId}-docx`;
 
                     return (
@@ -343,10 +426,10 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                         {/* Date */}
                         <TableCell className="text-xs whitespace-nowrap">
                           {new Date(entry.createdAt).toLocaleString("id-ID", {
-                            day:    "2-digit",
-                            month:  "short",
-                            year:   "numeric",
-                            hour:   "2-digit",
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
                             minute: "2-digit",
                           })}
                         </TableCell>
@@ -447,10 +530,16 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter((p) => {
                     if (totalPages <= 5) return true;
-                    return Math.abs(p - safePage) <= 1 || p === 1 || p === totalPages;
+                    return (
+                      Math.abs(p - safePage) <= 1 || p === 1 || p === totalPages
+                    );
                   })
                   .reduce<(number | "…")[]>((acc, p, i, arr) => {
-                    if (i > 0 && typeof arr[i - 1] === "number" && (p as number) - (arr[i - 1] as number) > 1) {
+                    if (
+                      i > 0 &&
+                      typeof arr[i - 1] === "number" &&
+                      (p as number) - (arr[i - 1] as number) > 1
+                    ) {
                       acc.push("…");
                     }
                     acc.push(p);
@@ -458,7 +547,10 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                   }, [])
                   .map((p, i) =>
                     p === "…" ? (
-                      <span key={`ellipsis-${i}`} className="px-1 text-muted-foreground text-sm">
+                      <span
+                        key={`ellipsis-${i}`}
+                        className="px-1 text-muted-foreground text-sm"
+                      >
                         …
                       </span>
                     ) : (
@@ -471,7 +563,7 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                       >
                         {p}
                       </Button>
-                    )
+                    ),
                   )}
 
                 <Button
