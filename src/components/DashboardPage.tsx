@@ -58,6 +58,21 @@ import {
 } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import ReactMarkdown from "react-markdown";
+
+function getUserFromToken(token: string): { username: string; email: string } {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return {
+      email: payload.email ?? "unknown@-",
+      username:
+        payload.user_metadata?.full_name ??
+        payload.email?.split("@")[0] ??
+        "Unknown",
+    };
+  } catch {
+    return { username: "Unknown", email: "unknown@-" };
+  }
+}
 interface DashboardPageProps {
   accessToken: string;
 }
@@ -136,7 +151,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
     try {
       // ✅ 1. START DARI MOCK (biar UI tetap tampil dulu)
       let finalResult: any = {};
-
+      const { username, email } = getUserFromToken(accessToken);
       // 🔥 2. FETCH API PARALLEL
       const [chatRes, apiRes] = await Promise.all([
         fetch("http://localhost:5000/chat", {
@@ -147,6 +162,8 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
           body: JSON.stringify({
             indicator: analysisValue,
             type,
+            username, // ← TAMBAH
+            email, // ← TAMBAH
           }),
         }),
         fetch("http://localhost:5000/api/analyze", {
@@ -183,7 +200,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.cve = chatData.cve;
         finalResult.cwe = chatData.cwe;
         // Flat string for the MITRE Technique label
-        finalResult.mitreTechnique = chatData.mitreTechnique ?? null;
+        finalResult.mitreTechniques = chatData.mitreTechniques ?? null;
         // ✅ Full objects array — THIS is what the card renders
         finalResult.mitreMitigations = Array.isArray(chatData.mitreMitigations)
           ? chatData.mitreMitigations
@@ -194,6 +211,10 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.mitigationDetails = finalResult.mitreMitigations;
         finalResult.nvdData = chatData.nvdData;
         finalResult.virusTotalIntel = chatData.virusTotalIntel ?? null;
+        finalResult.stats = chatData.vtData?.stats;
+        finalResult.vendors = chatData.vtData?.vendors;
+        finalResult.threatLevel = chatData.vtData?.threatLevel;
+        finalResult.total = chatData.vtData?.total;
       }
       console.log(finalResult.virusTotalIntel);
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
@@ -202,6 +223,10 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.vendors = apiData.vendors;
         finalResult.threatLevel = apiData.threatLevel;
         finalResult.total = apiData.total;
+        finalResult.virusTotalIntel =
+          apiData.virustotal ??
+          apiData.virusTotalIntel ??
+          finalResult.virusTotalIntel;
       }
 
       // 🔥 5. TAMBAHAN CHECK-IP (lebih detail untuk IP)
@@ -469,13 +494,48 @@ ${JSON.stringify(result.abuseData, null, 2)}
         ? 30
         : misp?.confidence === "Medium"
           ? 15
-          : 5);
+          : 0);
+
+  const hasMisp  = mispScore > 0;
+  const hasAbuse = abuse > 0;
+
+  let vtWeight: number;
+  let abuseWeight: number;
+  let mispWeight: number;
+
+  if (hasMisp && hasAbuse) {
+    vtWeight    = 0.50;
+    abuseWeight = 0.20;
+    mispWeight  = 0.30;
+
+  } else if (hasMisp && !hasAbuse) {
+    vtWeight    = 0.65;
+    abuseWeight = 0.00;
+    mispWeight  = 0.35;
+
+  } else if (!hasMisp && hasAbuse) {
+    vtWeight    = 0.65;
+    abuseWeight = 0.35;
+    mispWeight  = 0.00;
+
+  } else {
+    vtWeight    = 1.00;
+    abuseWeight = 0.00;
+    mispWeight  = 0.00;
+  }
+
+   const confidence = Math.min(
+    (vtRatio * 100) * vtWeight +
+    abuse      * abuseWeight +
+    mispScore       * mispWeight,
+    100
+  );
 
     return {
       malware: vtRatio * 100,
       reputation: abuse,
       intel: Math.min(mispScore, 100),
-      confidence: vtRatio * 40 + (abuse / 100) * 30 + (mispScore / 100) * 30,
+      confidence: Math.min(confidence, 100),
     };
   };
 
@@ -484,10 +544,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
     const scores = getCorrelationScores();
 
     return [
-      { metric: "Malware", score: scores.malware },
-      { metric: "Reputation", score: scores.reputation },
-      { metric: "Intel", score: scores.intel },
-      { metric: "Confidence", score: scores.confidence },
+      { metric: "VirusTotal Rating", score: scores.malware },
+      { metric: "Abuse Reputation", score: scores.reputation },
+      { metric: "MISP Intelligence", score: scores.intel },
+      { metric: "Confidence Total", score: scores.confidence },
       { metric: "History", score: scores.intel * 0.8 },
     ];
   };
@@ -547,7 +607,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 <div className="relative">
                   <Input
                     id="indicator"
-                    placeholder="Enter IP, Domain, URL, Hash (MD5/SHA1/SHA256), Subnet, or ASN..."
+                    placeholder="Enter IP, Domain, URL, or Hash (MD5/SHA1/SHA256)"
                     value={analysisValue}
                     onChange={(e) => handleInputChange(e.target.value)}
                     required
@@ -798,9 +858,13 @@ ${JSON.stringify(result.abuseData, null, 2)}
               const hasCrowdsource =
                 Array.isArray(intel.crowdsourced_context) &&
                 intel.crowdsourced_context.length > 0;
-              const showCveDetected =
-                intel.cve_extracted?.length > 0 && !(isIP && hasCrowdsource);
+              const generalCVEs =
+                intel.cve_extracted?.filter(
+                  (c: string) => !intel.yara_cves?.includes(c),
+                ) ?? [];
 
+              const showCveDetected =
+                generalCVEs.length > 0 && !(isIP && hasCrowdsource);
               // label judul indikator sesuai tipe
               const indicatorLabel: Record<string, string> = {
                 ip: "IP Address",
@@ -970,56 +1034,94 @@ ${JSON.stringify(result.abuseData, null, 2)}
                         <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
                           Crowdsourced Context
                         </p>
+
                         <div className="space-y-2">
                           {intel.crowdsourced_context.map(
-                            (ctx: any, i: number) => (
-                              <div
-                                key={i}
-                                className="flex items-start justify-between rounded-lg border p-3 gap-3"
-                              >
-                                <div className="space-y-1 flex-1">
-                                  <p className="text-xs">{ctx.detail}</p>
-                                  {ctx.source && (
-                                    <p className="text-xs text-muted-foreground">
-                                      Source: {ctx.source}
-                                    </p>
-                                  )}
-                                  {ctx.cve?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {ctx.cve.map((cve: string, j: number) => {
-                                        const url =
-                                          "https://nvd.nist.gov/vuln/detail/" +
-                                          cve;
-                                        return (
-                                          <a
-                                            key={j}
-                                            href={url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
-                                          >
-                                            {cve}
-                                          </a>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                                <Badge
-                                  variant={
-                                    ctx.severity === "HIGH" ||
-                                    ctx.severity === "CRITICAL"
-                                      ? "destructive"
-                                      : ctx.severity === "MEDIUM"
-                                        ? "default"
-                                        : "secondary"
-                                  }
-                                  className="text-xs shrink-0"
+                            (ctx: any, i: number) => {
+                              const detailText =
+                                ctx.detail ||
+                                ctx.details ||
+                                ctx.description ||
+                                "";
+
+                              const titleText = ctx.title || "Untitled";
+
+                              const severity = (
+                                ctx.severity || "low"
+                              ).toUpperCase();
+
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex items-start justify-between rounded-lg border p-3 gap-3"
                                 >
-                                  {ctx.severity}
-                                </Badge>
-                              </div>
-                            ),
+                                  <div className="space-y-1 flex-1">
+                                    {/* Source */}
+                                    {ctx.source && (
+                                      <p className="text-xs font-semibold">
+                                        {ctx.source}
+                                      </p>
+                                    )}
+
+                                    {/* Title */}
+                                    <p className="text-sm font-medium">
+                                      {titleText}
+                                    </p>
+
+                                    {/* Detail */}
+                                    {detailText.trim() !== "" ? (
+                                      <p className="text-xs text-muted-foreground leading-relaxed">
+                                        {detailText}
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground italic">
+                                        No detail available
+                                      </p>
+                                    )}
+
+                                    {/* CVE tags */}
+                                    {ctx.cve?.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {ctx.cve.map(
+                                          (cve: string, j: number) => {
+                                            const url =
+                                              "https://nvd.nist.gov/vuln/detail/" +
+                                              cve;
+
+                                            return (
+                                              <a
+                                                key={j}
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
+                                              >
+                                                {cve}
+                                              </a>
+                                            );
+                                          },
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Severity badge */}
+                                  <Badge
+                                    variant={
+                                      severity === "HIGH" ||
+                                      severity === "CRITICAL"
+                                        ? "destructive"
+                                        : severity === "MEDIUM"
+                                          ? "default"
+                                          : "secondary"
+                                    }
+                                    className="text-xs shrink-0"
+                                  >
+                                    {severity}
+                                  </Badge>
+                                </div>
+                              );
+                            },
                           )}
                         </div>
                       </div>
@@ -1182,6 +1284,50 @@ ${JSON.stringify(result.abuseData, null, 2)}
                               </div>
                             ),
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {intel.yara_cves?.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                          YARA Rule CVEs
+                        </p>
+
+                        <div className="space-y-2">
+                          {intel.yara_cves.map((cve: string, i: number) => {
+                            const url =
+                              "https://nvd.nist.gov/vuln/detail/" + cve;
+
+                            return (
+                              <div
+                                key={i}
+                                className="flex items-center justify-between rounded-lg border p-3"
+                              >
+                                <div className="flex flex-wrap gap-2 items-center">
+                                  <span className="text-sm font-mono">
+                                    {cve}
+                                  </span>
+
+                                  <a
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
+                                  >
+                                    View NVD
+                                  </a>
+                                </div>
+
+                                <Badge
+                                  variant="destructive"
+                                  className="text-xs"
+                                >
+                                  YARA
+                                </Badge>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1863,10 +2009,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
                       {analysisResult.confidence}
                     </span>
                   </div>
-                  {analysisResult.mitreTechnique && (
+                  {analysisResult.mitreTechniques && (
                     <div>
-                      <strong>MITRE Technique:</strong>{" "}
-                      {analysisResult.mitreTechnique}
+                      <strong>MITRE Techniques:</strong>{" "}
+                      {analysisResult.mitreTechniques?.join(", ")}
                     </div>
                   )}
                 </div>
