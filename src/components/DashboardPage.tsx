@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import remarkGfm from "remark-gfm";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -113,48 +114,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       setDetectedType("");
     }
   };
-  function generateMockAnalysisResult(value: string, type: string) {
-    // Generate seed from value for consistent results
-    const seed = value
-      .split("")
-      .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const abuseScore = seed % 100;
-    const total_reports = seed % 500;
-    // Geographic data
-    const countries = [
-      "US",
-      "CN",
-      "RU",
-      "DE",
-      "GB",
-      "FR",
-      "JP",
-      "BR",
-      "IN",
-      "CA",
-    ];
-    const countryNames = [
-      "United States",
-      "China",
-      "Russia",
-      "Germany",
-      "United Kingdom",
-      "France",
-      "Japan",
-      "Brazil",
-      "India",
-      "Canada",
-    ];
-    const isps = [
-      "Amazon.com Inc.",
-      "Google LLC",
-      "Cloudflare Inc.",
-      "Microsoft Corporation",
-      "DigitalOcean LLC",
-    ];
 
-    const countryIdx = seed % countries.length;
-  }
   const handleUnifiedAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -175,8 +135,7 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
 
     try {
       // ✅ 1. START DARI MOCK (biar UI tetap tampil dulu)
-      const mockResult = generateMockAnalysisResult(analysisValue, type);
-      let finalResult = { ...mockResult };
+      let finalResult: any = {};
 
       // 🔥 2. FETCH API PARALLEL
       const [chatRes, apiRes] = await Promise.all([
@@ -208,9 +167,12 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
 
       console.log("CHAT API:", chatData);
       console.log("UNIFIED API:", apiData);
+      console.log("CHAT VT:", chatData.vtData);
+      console.log("CHAT INTEL:", chatData.virusTotalIntel);
 
-      // 🔥 3. OVERRIDE DATA DARI CHAT API
-       if (chatData?.success){
+      console.log("API FULL:", apiData);
+
+      if (chatData?.success) {
         finalResult.aiAnalysis = chatData.aiAnalysis;
         finalResult.vtData = chatData.vtData;
         finalResult.abuseData = chatData.abuseData || null;
@@ -231,8 +193,9 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         );
         finalResult.mitigationDetails = finalResult.mitreMitigations;
         finalResult.nvdData = chatData.nvdData;
+        finalResult.virusTotalIntel = chatData.virusTotalIntel ?? null;
       }
-
+      console.log(finalResult.virusTotalIntel);
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
       if (apiData) {
         finalResult.stats = apiData.stats;
@@ -258,12 +221,9 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
           console.log("REAL ABUSE:", rawAbuse);
 
           const normalizedAbuse =
-          rawAbuse?.data ||
-          rawAbuse?.abuseipdb ||
-          rawAbuse ||
-          {};
+            rawAbuse?.data || rawAbuse?.abuseipdb || rawAbuse || {};
 
-        finalResult.abuseData = {
+           finalResult.abuseData = {
           data: {
           ipAddress: normalizedAbuse.ipAddress ?? analysisValue,
 
@@ -305,8 +265,8 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
            recent_reports: normalizedAbuse.recent_reports ?? [],
 
            abuse_categories: normalizedAbuse.abuse_categories ?? [],
-          },
-        };
+            },
+          };
         } catch (err) {
           console.error("Abuse fetch failed, fallback to existing:", err);
         }
@@ -422,44 +382,47 @@ ${JSON.stringify(result.abuseData, null, 2)}
     return analysisResult.vendors.slice(0, 100);
   };
 
-const getAbuseIPData = () => {
-  const raw = analysisResult?.abuseData?.data || analysisResult?.abuseData;
-  if (!raw) return null;
+  const getAbuseIPData = () => {
+    const raw = analysisResult?.abuseData?.data || analysisResult?.abuseData;
+    if (!raw) return null;
 
-  const pick = (a: any, b: any, fallback: any) => a ?? b ?? fallback;
+    const pick = (a: any, b: any, fallback: any) => a ?? b ?? fallback;
 
-  return {
-    abuse_confidence_score: pick(raw.abuse_confidence_score, raw.abuseConfidenceScore, 0),
+    return {
+      abuse_confidence_score: pick(
+        raw.abuse_confidence_score,
+        raw.abuseConfidenceScore,
+        0,
+      ),
 
-    country_code: pick(raw.country_code, raw.countryCode, "N/A"),
-    countryName: raw.countryName ?? "Unknown",
+      country_code: pick(raw.country_code, raw.countryCode, "N/A"),
+      countryName: raw.countryName ?? "Unknown",
 
-    total_reports: pick(raw.total_reports, raw.totalReports, 0),
+      total_reports: pick(raw.total_reports, raw.totalReports, 0),
 
-    isp: raw.isp ?? "N/A",
-    domain: raw.domain ?? "N/A",
+      isp: raw.isp ?? "N/A",
+      domain: raw.domain ?? "N/A",
 
-    usageType: pick(raw.usageType, raw.usage_type, "Unknown"),
+      usageType: pick(raw.usageType, raw.usage_type, "Unknown"),
 
-    isPublic: raw.isPublic ?? true,
-    isWhitelisted: raw.isWhitelisted ?? false,
-    ipVersion: raw.ipVersion ?? 4,
+      isPublic: raw.isPublic ?? true,
+      isWhitelisted: raw.isWhitelisted ?? false,
+      ipVersion: raw.ipVersion ?? 4,
 
-    numDistinctUsers: raw.numDistinctUsers ?? 0,    
-    lastReportedAt: pick(raw.lastReportedAt, raw.last_reported_at, null),
+      numDistinctUsers: raw.numDistinctUsers ?? 0,
+      lastReportedAt: pick(raw.lastReportedAt, raw.last_reported_at, null),
+    };
   };
-};
   const abuse = getAbuseIPData();
 
   const categoryMap =
-  analysisResult?.abuseData?.data?.abuse_categories?.reduce(
-    (acc: any, cat: any) => {
-      acc[cat.id] = cat.name;
-      return acc;
-    },
-    {}
-  ) || {};
-
+    analysisResult?.abuseData?.data?.abuse_categories?.reduce(
+      (acc: any, cat: any) => {
+        acc[cat.id] = cat.name;
+        return acc;
+      },
+      {},
+    ) || {};
   const getMISPData = () => {
     if (!analysisResult?.mispData) return null;
     return analysisResult.mispData;
@@ -540,6 +503,7 @@ const getAbuseIPData = () => {
   };
   console.log("MISP FULL:", getMISPData());
   console.log("MISP TAGS:", getMISPData()?.tags);
+
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       <div>
@@ -817,6 +781,415 @@ const getAbuseIPData = () => {
             </Card>
           </div>
 
+          {/* VirusTotal Intel Card — adaptif berdasarkan tipe input */}
+          {analysisResult.virusTotalIntel &&
+            (() => {
+              const intel = analysisResult.virusTotalIntel;
+              const isFile =
+                ["hash-md5", "hash-sha1", "hash-sha256"].includes(
+                  detectedType,
+                ) ||
+                // fallback: jika ada file_size atau meaningful_name berarti file
+                intel.meaningful_name ||
+                intel.file_size;
+
+              const currentType = detectedType;
+              const isIP = currentType === "ip";
+              const hasCrowdsource =
+                Array.isArray(intel.crowdsourced_context) &&
+                intel.crowdsourced_context.length > 0;
+              const showCveDetected =
+                intel.cve_extracted?.length > 0 && !(isIP && hasCrowdsource);
+
+              // label judul indikator sesuai tipe
+              const indicatorLabel: Record<string, string> = {
+                ip: "IP Address",
+                domain: "Domain",
+                url: "URL",
+                "hash-md5": "Hash (MD5)",
+                "hash-sha1": "Hash (SHA1)",
+                "hash-sha256": "Hash (SHA256)",
+                subnet: "Subnet",
+                asn: "ASN",
+              };
+              const label = indicatorLabel[detectedType] ?? "Indicator";
+
+              return (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Shield
+                        className="h-5 w-5"
+                        style={{ color: "#ef4444" }}
+                      />
+                      <CardTitle className="text-base sm:text-lg">
+                        VirusTotal Intelligence
+                      </CardTitle>
+                    </div>
+                    <CardDescription className="text-xs sm:text-sm">
+                      Detailed threat analysis and classification
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* ── Detection Summary ── */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      {/* Indicator */}
+                      <div className="rounded-lg border p-3 space-y-1 min-w-0">
+                        <p className="text-xs text-muted-foreground">{label}</p>
+                        <p
+                          className="text-xs font-mono leading-relaxed max-w-full"
+                          style={{
+                            wordBreak: "break-all",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {intel.indicator ?? intel.hash ?? "-"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* ── File Metadata — hanya tampil jika file/hash ── */}
+                    {isFile &&
+                      (intel.meaningful_name ||
+                        intel.type_description ||
+                        intel.file_size) && (
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                          {intel.meaningful_name && (
+                            <div className="rounded-lg border p-3 space-y-1">
+                              <p className="text-xs text-muted-foreground">
+                                File Name
+                              </p>
+                              <p className="text-sm font-semibold truncate">
+                                {intel.meaningful_name}
+                              </p>
+                            </div>
+                          )}
+                          {intel.type_description && (
+                            <div className="rounded-lg border p-3 space-y-1">
+                              <p className="text-xs text-muted-foreground">
+                                File Type
+                              </p>
+                              <p className="text-sm font-semibold">
+                                {intel.type_description}
+                              </p>
+                            </div>
+                          )}
+                          {intel.file_size && (
+                            <div className="rounded-lg border p-3 space-y-1">
+                              <p className="text-xs text-muted-foreground">
+                                File Size
+                              </p>
+                              <p className="text-sm font-semibold">
+                                {(intel.file_size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                    {/* ── Threat Classification ── */}
+                    {intel.popular_threat_classification
+                      ?.popular_threat_category && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                          Threat Classification
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="destructive" className="text-xs">
+                            {
+                              intel.popular_threat_classification
+                                .popular_threat_category
+                            }
+                          </Badge>
+                          {intel.popular_threat_classification.popular_threat_name?.map(
+                            (name: string, i: number) => (
+                              <Badge
+                                key={i}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {name}
+                              </Badge>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Tags & CVEs ── */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {intel.tags?.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                            Tags
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {intel.tags.map((tag: string, i: number) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 text-xs rounded-md bg-slate-100 text-slate-700 border"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {showCveDetected && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                            CVEs Detected
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {intel.cve_extracted.map(
+                              (cve: string, i: number) => {
+                                const nvdUrl =
+                                  "https://nvd.nist.gov/vuln/detail/" + cve;
+                                return (
+                                  <a
+                                    key={i}
+                                    href={nvdUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2 py-0.5 text-xs rounded-md bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
+                                  >
+                                    {cve}
+                                  </a>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Crowdsourced Context (IP/domain — mirip screenshot VT) ── */}
+                    {intel.crowdsourced_context?.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                          Crowdsourced Context
+                        </p>
+                        <div className="space-y-2">
+                          {intel.crowdsourced_context.map(
+                            (ctx: any, i: number) => (
+                              <div
+                                key={i}
+                                className="flex items-start justify-between rounded-lg border p-3 gap-3"
+                              >
+                                <div className="space-y-1 flex-1">
+                                  <p className="text-xs">{ctx.detail}</p>
+                                  {ctx.source && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Source: {ctx.source}
+                                    </p>
+                                  )}
+                                  {ctx.cve?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {ctx.cve.map((cve: string, j: number) => {
+                                        const url =
+                                          "https://nvd.nist.gov/vuln/detail/" +
+                                          cve;
+                                        return (
+                                          <a
+                                            key={j}
+                                            href={url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
+                                          >
+                                            {cve}
+                                          </a>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                                <Badge
+                                  variant={
+                                    ctx.severity === "HIGH" ||
+                                    ctx.severity === "CRITICAL"
+                                      ? "destructive"
+                                      : ctx.severity === "MEDIUM"
+                                        ? "default"
+                                        : "secondary"
+                                  }
+                                  className="text-xs shrink-0"
+                                >
+                                  {ctx.severity}
+                                </Badge>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Behavior Summary — hanya untuk file ── */}
+                    {/* {isFile && intel.behavior_summary && (
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                          Behavior Summary
+                        </p>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {intel.behavior_summary.network_communications
+                            ?.length > 0 && (
+                            <div className="rounded-lg border p-3 space-y-2">
+                              <p className="text-xs font-semibold flex items-center gap-1">
+                                <Globe className="h-3 w-3" /> Network
+                                Communications
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {intel.behavior_summary.network_communications.map(
+                                  (n: string, i: number) => (
+                                    <span
+                                      key={i}
+                                      className="px-2 py-0.5 text-xs rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono"
+                                    >
+                                      {n}
+                                    </span>
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {intel.behavior_summary.drops_files?.length > 0 && (
+                            <div className="rounded-lg border p-3 space-y-2">
+                              <p className="text-xs font-semibold">
+                                📁 Dropped Files
+                              </p>
+                              <ul className="space-y-1">
+                                {intel.behavior_summary.drops_files.map(
+                                  (f: string, i: number) => (
+                                    <li
+                                      key={i}
+                                      className="text-xs font-mono text-orange-700 bg-orange-50 px-2 py-0.5 rounded"
+                                    >
+                                      {f}
+                                    </li>
+                                  ),
+                                )}
+                              </ul>
+                            </div>
+                          )}
+                          {intel.behavior_summary.registry_modifications
+                            ?.length > 0 && (
+                            <div className="rounded-lg border p-3 space-y-2">
+                              <p className="text-xs font-semibold">
+                                🔑 Registry Modifications
+                              </p>
+                              <ul className="space-y-1">
+                                {intel.behavior_summary.registry_modifications.map(
+                                  (r: string, i: number) => (
+                                    <li
+                                      key={i}
+                                      className="text-xs font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded break-all"
+                                    >
+                                      {r}
+                                    </li>
+                                  ),
+                                )}
+                              </ul>
+                            </div>
+                          )}
+                          {intel.behavior_summary.processes_created?.length >
+                            0 && (
+                            <div className="rounded-lg border p-3 space-y-2">
+                              <p className="text-xs font-semibold">
+                                ⚙️ Processes Created
+                              </p>
+                              <ul className="space-y-1">
+                                {intel.behavior_summary.processes_created.map(
+                                  (p: string, i: number) => (
+                                    <li
+                                      key={i}
+                                      className="text-xs font-mono text-gray-700 bg-gray-50 px-2 py-0.5 rounded break-all"
+                                    >
+                                      {p}
+                                    </li>
+                                  ),
+                                )}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                            <span className="text-xs text-muted-foreground">
+                              Files Encrypted:
+                            </span>
+                            <Badge
+                              variant={
+                                intel.behavior_summary.files_encrypted
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {intel.behavior_summary.files_encrypted
+                                ? "YES"
+                                : "NO"}
+                            </Badge>
+                          </div>
+                          {intel.behavior_summary.mutex_created && (
+                            <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+                              <span className="text-xs text-muted-foreground">
+                                Mutex:
+                              </span>
+                              <span className="text-xs font-mono">
+                                {intel.behavior_summary.mutex_created}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )} */}
+
+                    {/* ── Sigma / IDS Rules — hanya untuk file ── */}
+                    {isFile && intel.sigma_analysis_results?.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                          IDS / Sigma Rules Matched
+                        </p>
+                        <div className="space-y-2">
+                          {intel.sigma_analysis_results.map(
+                            (rule: any, i: number) => (
+                              <div
+                                key={i}
+                                className="flex items-center justify-between rounded-lg border p-3"
+                              >
+                                <div>
+                                  <p className="text-xs font-semibold">
+                                    {rule.rule_title}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground font-mono">
+                                    {rule.rule_id}
+                                  </p>
+                                </div>
+                                <Badge
+                                  variant={
+                                    rule.severity === "CRITICAL" ||
+                                    rule.severity === "HIGH"
+                                      ? "destructive"
+                                      : rule.severity === "MEDIUM"
+                                        ? "default"
+                                        : "secondary"
+                                  }
+                                  className="text-xs"
+                                >
+                                  {rule.severity}
+                                </Badge>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
           {/* 7. Security Vendor Analysis */}
           <Card>
             <CardHeader>
@@ -951,16 +1324,12 @@ const getAbuseIPData = () => {
 
                   <div>
                     <p className="text-sm text-muted-foreground">Domain</p>
-                    <p className="text-base truncate">
-                      {abuse?.domain ?? "-"}
-                    </p>
+                    <p className="text-base truncate">{abuse?.domain ?? "-"}</p>
                   </div>
 
                   <div>
                     <p className="text-sm text-muted-foreground">Usage Type</p>
-                    <p className="text-base">
-                      {abuse?.usageType ?? "-"}
-                    </p>
+                    <p className="text-base">{abuse?.usageType ?? "-"}</p>
                   </div>
 
                   <div>
@@ -974,9 +1343,7 @@ const getAbuseIPData = () => {
                     <p className="text-sm text-muted-foreground">Whitelisted</p>
                     <p
                       className={`font-semibold ${
-                        abuse?.isWhitelisted
-                          ? "text-green-600"
-                          : "text-red-600"
+                        abuse?.isWhitelisted ? "text-green-600" : "text-red-600"
                       }`}
                     >
                       {abuse?.isWhitelisted ? "Yes" : "No"}
@@ -985,72 +1352,74 @@ const getAbuseIPData = () => {
 
                   <div>
                     <p className="text-sm text-muted-foreground">IP Version</p>
-                    <p className="text-base">
-                      IPv{abuse?.ipVersion ?? "-"}
-                    </p>
+                    <p className="text-base">IPv{abuse?.ipVersion ?? "-"}</p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground">Distinct Users</p>
-                    <p className="text-base">
-                      {abuse?.numDistinctUsers ?? 0}
+                    <p className="text-sm text-muted-foreground">
+                      Distinct Users
                     </p>
+                    <p className="text-base">{abuse?.numDistinctUsers ?? 0}</p>
                   </div>
 
                   <div className="col-span-2">
-                    <p className="text-sm text-muted-foreground">Last Reported</p>
+                    <p className="text-sm text-muted-foreground">
+                      Last Reported
+                    </p>
                     <p className="text-base">
-                      {abuse?.lastReportedAt && !isNaN(new Date(abuse.lastReportedAt).getTime())
+                      {abuse?.lastReportedAt &&
+                      !isNaN(new Date(abuse.lastReportedAt).getTime())
                         ? new Date(abuse.lastReportedAt).toLocaleString()
                         : "Never"}
                     </p>
                   </div>
                 </div>
-                  <div className="col-span-2 mt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowReports(!showReports)}
-                    >
-                      {showReports ? "Hide Reports" : "Show Recent Reports"}
-                    </Button>
+                <div className="col-span-2 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowReports(!showReports)}
+                  >
+                    {showReports ? "Hide Reports" : "Show Recent Reports"}
+                  </Button>
 
                   {showReports && (
                     <div className="mt-4 w-full flex gap-4 overflow-x-auto pb-2">
                       {analysisResult?.abuseData?.data?.recent_reports
                         ?.slice(0, 5)
                         .map((report: any, index: number) => (
-                      <div
-                        key={index}
-                        className="p-3 rounded-lg border bg-muted/40 text-sm"
-                      >
-
-                      <p className="text-xs font-semibold">Reported at:</p> 
-                      <p className="font-semibold">
-                        {new Date(report.reported_at).toLocaleString()}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {report.categories?.map((catId: number, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-1 text-xs rounded-md bg-blue-100 text-blue-700 border"
+                          <div
+                            key={index}
+                            className="p-3 rounded-lg border bg-muted/40 text-sm"
                           >
-                          {categoryMap[catId] || `Unknown (${catId})`}
-                          </span>
+                            <p className="text-xs font-semibold">
+                              Reported at:
+                            </p>
+                            <p className="font-semibold">
+                              {new Date(report.reported_at).toLocaleString()}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {report.categories?.map(
+                                (catId: number, i: number) => (
+                                  <span
+                                    key={i}
+                                    className="px-2 py-1 text-xs rounded-md bg-blue-100 text-blue-700 border"
+                                  >
+                                    {categoryMap[catId] || `Unknown (${catId})`}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                            <p className="text-xs font-semibold">Comment:</p>
+                            <p className="text-muted-foreground mt-1">
+                              {report.comment || "No comment"}
+                            </p>
+                          </div>
                         ))}
-                      </div>
-                      <p className="text-xs font-semibold">Comment:</p>
-                      <p className="text-muted-foreground mt-1">
-                        {report.comment || "No comment"}
-                      </p>
-                      </div>
-                      
-                    ))}
                     </div>
                   )}
-                  </div>
-                  
-                
+                </div>
+                 
               </CardContent>
             </Card>
           )}
@@ -1410,7 +1779,41 @@ const getAbuseIPData = () => {
             </CardHeader>
             <CardContent>
               <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
-                <ReactMarkdown>{analysisResult.aiAnalysis}</ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-4">
+                        <table className="w-full text-xs border border-gray-300 rounded-md">
+                          {children}
+                        </table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="bg-gray-100 text-gray-700">
+                        {children}
+                      </thead>
+                    ),
+                    tbody: ({ children }) => (
+                      <tbody className="divide-y">{children}</tbody>
+                    ),
+                    tr: ({ children }) => (
+                      <tr className="hover:bg-gray-50">{children}</tr>
+                    ),
+                    th: ({ children }) => (
+                      <th className="px-3 py-2 text-left font-semibold border">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="px-3 py-2 border text-gray-700">
+                        {children}
+                      </td>
+                    ),
+                  }}
+                >
+                  {analysisResult.aiAnalysis}
+                </ReactMarkdown>{" "}
               </div>
             </CardContent>
           </Card>
