@@ -19,7 +19,7 @@ export function AppSidebar({ sidebarOpen, setSidebarOpen, user }: Props) {
   const navigationItems = [
     {
       id: "dashboard",
-      label: "Dashboard",
+      label: "Threat Analysis",
       icon: LayoutDashboard,
       path: "/dashboard",
     },

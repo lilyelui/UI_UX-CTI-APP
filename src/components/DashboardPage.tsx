@@ -493,13 +493,43 @@ ${JSON.stringify(result.abuseData, null, 2)}
         ? 30
         : misp?.confidence === "Medium"
           ? 15
-          : 5);
+          : 0);
+
+    const hasMisp = mispScore > 0;
+    const hasAbuse = abuse > 0;
+
+    let vtWeight: number;
+    let abuseWeight: number;
+    let mispWeight: number;
+
+    if (hasMisp && hasAbuse) {
+      vtWeight = 0.5;
+      abuseWeight = 0.2;
+      mispWeight = 0.3;
+    } else if (hasMisp && !hasAbuse) {
+      vtWeight = 0.65;
+      abuseWeight = 0.0;
+      mispWeight = 0.35;
+    } else if (!hasMisp && hasAbuse) {
+      vtWeight = 0.65;
+      abuseWeight = 0.35;
+      mispWeight = 0.0;
+    } else {
+      vtWeight = 1.0;
+      abuseWeight = 0.0;
+      mispWeight = 0.0;
+    }
+
+    const confidence = Math.min(
+      vtRatio * 100 * vtWeight + abuse * abuseWeight + mispScore * mispWeight,
+      100,
+    );
 
     return {
       malware: vtRatio * 100,
       reputation: abuse,
       intel: Math.min(mispScore, 100),
-      confidence: vtRatio * 40 + (abuse / 100) * 30 + (mispScore / 100) * 30,
+      confidence: Math.min(confidence, 100),
     };
   };
 
@@ -508,15 +538,15 @@ ${JSON.stringify(result.abuseData, null, 2)}
     const scores = getCorrelationScores();
 
     return [
-      { metric: "Malware", score: scores.malware },
-      { metric: "Reputation", score: scores.reputation },
-      { metric: "Intel", score: scores.intel },
-      { metric: "Confidence", score: scores.confidence },
+      { metric: "VirusTotal Rating", score: scores.malware },
+      { metric: "Abuse Reputation", score: scores.reputation },
+      { metric: "MISP Intelligence", score: scores.intel },
+      { metric: "Confidence Total", score: scores.confidence },
       { metric: "History", score: scores.intel * 0.8 },
     ];
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string) => { 
     if (type.includes("hash")) return "🔐";
     if (type === "ip") return "🌐";
     if (type === "domain") return "🔗";
