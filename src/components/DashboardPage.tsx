@@ -546,7 +546,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
     ];
   };
 
-  const getTypeIcon = (type: string) => { 
+  const getTypeIcon = (type: string) => {
     if (type.includes("hash")) return "🔐";
     if (type === "ip") return "🌐";
     if (type === "domain") return "🔗";
@@ -1363,18 +1363,24 @@ ${JSON.stringify(result.abuseData, null, 2)}
                           {vendor.vendor}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={
-                              vendor.category === "malicious"
-                                ? "destructive"
-                                : vendor.category === "suspicious"
-                                  ? "default"
-                                  : "secondary"
-                            }
-                            className="text-xs"
-                          >
-                            {vendor.category}
-                          </Badge>
+                          {(() => {
+                            const categoryColors: Record<string, string> = {
+                              malicious: "#ef4444",
+                              suspicious: "#f59e0b",
+                              harmless: "#10b981",
+                              undetected: "#6b7280",
+                            };
+                            const color =
+                              categoryColors[vendor.category] ?? "#6b7280";
+                            return (
+                              <Badge
+                                className="text-xs text-white border-0"
+                                style={{ backgroundColor: color }}
+                              >
+                                {vendor.category}
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-xs sm:text-sm">
                           {vendor.result}
@@ -1985,29 +1991,13 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 </div>
               )}
 
-              {/* Confidence + MITRE badge */}
-              {analysisResult.confidence !== undefined && (
+              {/* MITRE Techniques */}
+              {analysisResult.mitreTechniques && (
                 <div className="mt-2 space-y-1 text-xs sm:text-sm">
                   <div>
-                    <strong>Confidence:</strong>{" "}
-                    <span
-                      className={
-                        analysisResult.confidence === "High"
-                          ? "text-red-600"
-                          : analysisResult.confidence === "Medium"
-                            ? "text-yellow-500"
-                            : "text-green-600"
-                      }
-                    >
-                      {analysisResult.confidence}
-                    </span>
+                    <strong>MITRE Techniques:</strong>{" "}
+                    {analysisResult.mitreTechniques?.join(", ")}
                   </div>
-                  {analysisResult.mitreTechniques && (
-                    <div>
-                      <strong>MITRE Techniques:</strong>{" "}
-                      {analysisResult.mitreTechniques?.join(", ")}
-                    </div>
-                  )}
                 </div>
               )}
 
