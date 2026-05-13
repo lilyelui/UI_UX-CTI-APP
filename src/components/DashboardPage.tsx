@@ -1929,29 +1929,13 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 </div>
               )}
 
-              {/* Confidence + MITRE badge */}
-              {analysisResult.confidence !== undefined && (
+              {/* MITRE Techniques */}
+              {analysisResult.mitreTechniques && (
                 <div className="mt-2 space-y-1 text-xs sm:text-sm">
                   <div>
-                    <strong>Confidence:</strong>{" "}
-                    <span
-                      className={
-                        analysisResult.confidence === "High"
-                          ? "text-red-600"
-                          : analysisResult.confidence === "Medium"
-                            ? "text-yellow-500"
-                            : "text-green-600"
-                      }
-                    >
-                      {analysisResult.confidence}
-                    </span>
-                  </div>
-                  {analysisResult.mitreTechniques && (
-                    <div>
-                      <strong>MITRE Techniques:</strong>{" "}
+                    <strong>MITRE Techniques:</strong>{" "}
                       {analysisResult.mitreTechniques?.join(", ")}
-                    </div>
-                  )}
+                  </div>
                 </div>
               )}
 
