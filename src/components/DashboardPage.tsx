@@ -1598,17 +1598,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   </div>
 
                   <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Confidence</p>
-                    <p
-                      className={`text-2xl font-bold ${
-                        getMISPData()?.confidence === "High"
-                          ? "text-red-600"
-                          : getMISPData()?.confidence === "Medium"
-                            ? "text-yellow-500"
-                            : "text-green-600"
-                      }`}
-                    >
-                      {getMISPData()?.confidence || "Low"}
+                    <p className="text-xs text-muted-foreground">Title</p>
+
+                    <p className="text-sm font-semibold break-words">
+                      {getMISPData()?.title ?? "-"}
                     </p>
                   </div>
 
@@ -1622,9 +1615,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   </div>
 
                   <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Score </p>
+                    <p className="text-xs text-muted-foreground">Attributes</p>
+
                     <p className="text-2xl font-bold">
-                      {getMISPData()?.score || "-"}
+                      {getMISPData()?.attributes ?? "-"}
                     </p>
                   </div>
                 </div>
