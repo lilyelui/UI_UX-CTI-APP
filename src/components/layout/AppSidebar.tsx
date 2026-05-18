@@ -88,7 +88,7 @@ export function AppSidebar({ sidebarOpen, setSidebarOpen, user }: Props) {
                   letterSpacing: "-0.01em",
                 }}
               >
-                CTI Platform
+                Cyber Fusion
               </h2>
 
               <p
@@ -98,7 +98,7 @@ export function AppSidebar({ sidebarOpen, setSidebarOpen, user }: Props) {
                   opacity: 0.7,
                 }}
               >
-                Threat Intelligence
+                by Aegis Intelligence
               </p>
             </div>
           </div>

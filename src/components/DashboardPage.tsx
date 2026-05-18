@@ -150,7 +150,10 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
 
     try {
       // ✅ 1. START DARI MOCK (biar UI tetap tampil dulu)
-      let finalResult: any = {};
+      let finalResult: any = {
+        indicator: analysisValue,
+        type,
+      };
       const { username, email } = getUserFromToken(accessToken);
       // 🔥 2. FETCH API PARALLEL
       const [chatRes, apiRes] = await Promise.all([
@@ -190,6 +193,14 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       console.log("API FULL:", apiData);
 
       if (chatData?.success) {
+        finalResult.reportId = chatData.reportId;
+        finalResult.severity = chatData.severity;
+        finalResult.abuseipdb = chatData.abuseipdb;
+        finalResult.cveMatches = chatData.cveMatches || [];
+        finalResult.cveRiskScore = chatData.cveRiskScore || null;
+        finalResult.whoisData = chatData.whoisData || null;
+        finalResult.history = chatData.history || null;
+        finalResult.pe_header = chatData.pe_header || null;
         finalResult.aiAnalysis = chatData.aiAnalysis;
         finalResult.vtData = chatData.vtData;
         finalResult.abuseData = chatData.abuseData;
@@ -310,31 +321,108 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       setLoading(false);
     }
   };
-  const handleDownload = async (format: "pdf" | "docx") => {
-    if (!analysisResult?.aiAnalysis) return;
+  const handleDownload = async (format: "pdf" | "docx" | "json") => {
+    if (!analysisResult) return;
 
     try {
-      const res = await fetch("http://localhost:5000/api/export", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content: analysisResult.aiAnalysis,
-          format,
-        }),
-      });
+      let res: Response;
+
+      if (format === "json") {
+        const stixPayload = {
+          ...analysisResult,
+          indicator: analysisResult.indicator,
+          type: analysisResult.type,
+          reportId: analysisResult.reportId || `REPORT-${Date.now()}`,
+
+          malicious: analysisResult?.stats?.malicious || 0,
+          suspicious: analysisResult?.stats?.suspicious || 0,
+          harmless: analysisResult?.stats?.harmless || 0,
+          undetected: analysisResult?.stats?.undetected || 0,
+          totalVendors: analysisResult?.total || 0,
+
+          abuseScore:
+            analysisResult?.abuseData?.data?.abuse_confidence_score ||
+            analysisResult?.abuseipdb?.abuse_confidence_score ||
+            0,
+
+          totalReports:
+            analysisResult?.abuseData?.data?.totalReports ||
+            analysisResult?.abuseData?.data?.total_reports ||
+            analysisResult?.abuseipdb?.total_reports ||
+            0,
+
+          abuseipdb:
+            analysisResult?.abuseipdb ||
+            analysisResult?.abuseData?.data ||
+            null,
+
+          mispData: analysisResult?.mispData || {},
+          cveMatches: analysisResult?.cveMatches || [],
+          cveRiskScore: analysisResult?.cveRiskScore || null,
+
+          mitreData: {
+            techniques: Array.isArray(analysisResult?.mitreTechniqueDetails)
+              ? analysisResult.mitreTechniqueDetails
+              : [],
+            mitigations: Array.isArray(analysisResult?.mitreMitigations)
+              ? analysisResult.mitreMitigations
+              : [],
+          },
+
+          whoisData: analysisResult?.whoisData || null,
+          history: analysisResult?.history || null,
+          pe_header: analysisResult?.pe_header || null,
+          correlationInsights: analysisResult?.correlationInsights || "",
+        };
+
+        res = await fetch("http://localhost:5000/export/stix", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(stixPayload),
+        });
+      } else {
+        if (!analysisResult?.aiAnalysis) return;
+
+        res = await fetch("http://localhost:5000/api/export", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content: analysisResult.aiAnalysis,
+            format,
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || `Export failed with status ${res.status}`);
+      }
 
       const blob = await res.blob();
-
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
 
       a.href = url;
-      a.download = `Threat Intelligence Report.${format}`;
-      a.click();
+      a.download =
+        format === "json"
+          ? `Threat Intelligence STIX.json`
+          : `Threat Intelligence Report.${format}`;
 
-      toast.success(`Report downloaded as ${format.toUpperCase()}`);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      toast.success(
+        format === "json"
+          ? "STIX JSON downloaded successfully"
+          : `Report downloaded as ${format.toUpperCase()}`,
+      );
     } catch (error) {
       console.error("Download error:", error);
       toast.error("Failed to download report");
@@ -1333,7 +1421,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
           {/* 7. Security Vendor Analysis */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base sm:text-lg">
+              <CardTitle
+                className="text-base sm:text-lg"
+                style={{ fontWeight: 700 }}
+              >
                 Security Vendor Analysis
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
@@ -1345,13 +1436,13 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs sm:text-sm">
+                      <TableHead className="text-xs font-semibold sm:text-sm">
                         Vendor
                       </TableHead>
-                      <TableHead className="text-xs sm:text-sm">
+                      <TableHead className="text-xs font-semibold sm:text-sm">
                         Category
                       </TableHead>
-                      <TableHead className="text-xs sm:text-sm">
+                      <TableHead className="text-xs font-semibold sm:text-sm">
                         Result
                       </TableHead>
                     </TableRow>
@@ -1891,7 +1982,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
           <Card>
             <CardHeader>
               <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <span className="text-base sm:text-lg flex items-center gap-2">
+                <span
+                  className="text-base sm:text-lg flex items-center gap-2"
+                  style={{ fontWeight: 700 }}
+                >
                   <Activity className="h-5 w-5" />
                   AI-Generated Analysis Report
                 </span>
@@ -1912,6 +2006,15 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   >
                     <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
                     Download DOCX
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownload("json")}
+                    className="text-xs sm:text-sm"
+                  >
+                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    Download STIX JSON
                   </Button>
                 </div>
               </CardTitle>
