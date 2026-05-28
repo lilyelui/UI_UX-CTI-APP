@@ -17,6 +17,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AppSidebar } from "./components/layout/AppSidebar";
+import { GoogleSignupCallback } from "./components/GoogleSignupCallback";
 
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/sonner";
@@ -273,6 +274,10 @@ export default function App() {
                   )
                 }
               />
+              <Route
+                path="/google-signup-callback"
+                element={<GoogleSignupCallback />}
+              />
 
               {/* PRIVATE ROUTES */}
               <Route
@@ -323,6 +328,7 @@ export default function App() {
                       apiBaseUrl={apiBaseUrl}
                       user={user}
                       onLogout={handleLogout}
+                      onUserUpdate={setUser}
                     />
                   </ProtectedRoute>
                 }

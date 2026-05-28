@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getSupabaseClient } from "../utils/supabase/client";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -27,7 +28,18 @@ export function LoginPage({
   const [loading, setLoading] = useState(false);
 
   const supabase = getSupabaseClient();
+  const location = useLocation();
+  const navigate = useNavigate();
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+
+    if (params.get("signup") === "success") {
+      toast.success("Google account created successfully! Please sign in.");
+      navigate("/login", { replace: true });
+    }
+  }, [location.search, navigate]);
+  
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -58,21 +70,24 @@ export function LoginPage({
 
   const handleGoogleLogin = async () => {
     try {
-      // Note: To enable Google login, you need to configure it in Supabase Dashboard
-      // Follow instructions at: https://supabase.com/docs/guides/auth/social-login/auth-google
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      setLoading(true);
+
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
       });
 
       if (error) {
         console.error("Google login error:", error);
-        toast.error(
-          "Google login not configured. Please use email login or contact administrator.",
-        );
+        toast.error(`Google login failed: ${error.message}`);
       }
     } catch (error) {
       console.error("Google login processing error:", error);
       toast.error("Google login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
