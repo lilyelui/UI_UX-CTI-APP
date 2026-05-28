@@ -14,7 +14,7 @@ import { SignupPage } from "./components/SignupPage";
 import { DashboardPage } from "./components/DashboardPage";
 import { HistoryPage } from "./components/HistoryPage";
 import { SettingsPage } from "./components/SettingsPage";
-
+import { AdminDashboard } from "./components/AdminDashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AppSidebar } from "./components/layout/AppSidebar";
 
@@ -36,6 +36,7 @@ export default function App() {
   const [accessToken, setAccessToken] = useState("");
 
   const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   /* ===========================================
      CHECK SESSION
@@ -50,6 +51,13 @@ export default function App() {
         setIsAuthenticated(true);
         setAccessToken(session.access_token);
         setUser(session.user);
+
+        await fetchUserRole(session.user);
+      } else {
+        setIsAuthenticated(false);
+        setAccessToken("");
+        setUser(null);
+        setUserRole(null);
       }
 
       setLoading(false);
@@ -64,16 +72,47 @@ export default function App() {
         setIsAuthenticated(true);
         setAccessToken(session.access_token);
         setUser(session.user);
+
+        fetchUserRole(session.user);
       } else {
         setIsAuthenticated(false);
         setAccessToken("");
         setUser(null);
+        setUserRole(null);
         navigate("/login");
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+  const fetchUserRole = async (authUser: any) => {
+    try {
+      if (!authUser?.id) {
+        setUserRole("user");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, role")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      console.log("AUTH USER:", authUser);
+      console.log("PROFILE ROLE DATA:", data);
+
+      if (error) {
+        console.error("Failed to fetch user role:", error);
+        setUserRole("user");
+        return;
+      }
+
+      setUserRole(data?.role ?? "user");
+    } catch (error) {
+      console.error("Unexpected role fetch error:", error);
+      setUserRole("user");
+    }
+  };
 
   /* ===========================================
      MOBILE SIDEBAR
@@ -87,10 +126,12 @@ export default function App() {
   /* ===========================================
      LOGIN SUCCESS
   =========================================== */
-  const handleLoginSuccess = (token: string, userData: any) => {
+  const handleLoginSuccess = async (token: string, userData: any) => {
     setIsAuthenticated(true);
     setAccessToken(token);
     setUser(userData);
+
+    await fetchUserRole(userData);
 
     navigate("/dashboard");
   };
@@ -106,9 +147,14 @@ export default function App() {
      LOGOUT
   =========================================== */
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
+    setUserRole(null);
+    setUser(null);
+    setAccessToken("");
+    setIsAuthenticated(false);
 
+    await supabase.auth.signOut();
+    navigate("/login");
+  };
   /* ===========================================
      LOADING
   =========================================== */
@@ -124,7 +170,7 @@ export default function App() {
     isAuthenticated &&
     location.pathname !== "/login" &&
     location.pathname !== "/signup";
-
+  const apiBaseUrl = "http://localhost:5000";
   return (
     <>
       <div className="min-h-screen bg-background">
@@ -134,6 +180,7 @@ export default function App() {
             sidebarOpen={sidebarOpen}
             setSidebarOpen={setSidebarOpen}
             user={user}
+            userRole={userRole}
             onLogout={handleLogout}
           />
         )}
@@ -232,7 +279,10 @@ export default function App() {
                 path="/dashboard"
                 element={
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <DashboardPage accessToken={accessToken} />
+                    <DashboardPage
+                      accessToken={accessToken}
+                      apiBaseUrl={apiBaseUrl}
+                    />
                   </ProtectedRoute>
                 }
               />
@@ -241,7 +291,25 @@ export default function App() {
                 path="/history"
                 element={
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
-                    <HistoryPage accessToken={accessToken} />
+                    <HistoryPage
+                      accessToken={accessToken}
+                      apiBaseUrl={apiBaseUrl}
+                    />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    {userRole === "admin" ? (
+                      <AdminDashboard
+                        accessToken={accessToken}
+                        apiBaseUrl={apiBaseUrl}
+                      />
+                    ) : (
+                      <Navigate to="/dashboard" replace />
+                    )}
                   </ProtectedRoute>
                 }
               />
@@ -252,6 +320,7 @@ export default function App() {
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <SettingsPage
                       accessToken={accessToken}
+                      apiBaseUrl={apiBaseUrl}
                       user={user}
                       onLogout={handleLogout}
                     />

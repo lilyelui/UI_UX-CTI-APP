@@ -5,7 +5,7 @@
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": false,
     "skipLibCheck": true,
-    "esModuleInterop": false,
+    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
@@ -18,5 +18,12 @@
     "types": ["vite/client"]
   },
   "include": ["src"],
-  "exclude": ["src/supabase/functions/**"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "supabase",
+    "supabase/**",
+    "supabase/functions",
+    "supabase/functions/**"
+  ]
 }

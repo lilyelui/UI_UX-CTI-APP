@@ -3,16 +3,28 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
 
-import { Shield, LayoutDashboard, History, Settings } from "lucide-react";
-
+import {
+  Shield,
+  LayoutDashboard,
+  History,
+  Settings,
+  Users,
+} from "lucide-react";
 type Props = {
   sidebarOpen: boolean;
+  userRole?: string | null;
   setSidebarOpen: (value: boolean) => void;
   user: any;
   onLogout: () => void;
 };
 
-export function AppSidebar({ sidebarOpen, setSidebarOpen, user }: Props) {
+export function AppSidebar({
+  sidebarOpen,
+  setSidebarOpen,
+  user,
+  userRole,
+  onLogout,
+}: Props) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -29,6 +41,16 @@ export function AppSidebar({ sidebarOpen, setSidebarOpen, user }: Props) {
       icon: History,
       path: "/history",
     },
+    ...(userRole === "admin"
+      ? [
+          {
+            id: "admin",
+            label: "Admin",
+            icon: Users,
+            path: "/admin",
+          },
+        ]
+      : []),
     {
       id: "settings",
       label: "Settings",
@@ -36,7 +58,6 @@ export function AppSidebar({ sidebarOpen, setSidebarOpen, user }: Props) {
       path: "/settings",
     },
   ];
-
   return (
     <>
       {/* Mobile Overlay */}

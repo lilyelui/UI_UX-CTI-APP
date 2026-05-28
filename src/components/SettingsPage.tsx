@@ -17,12 +17,14 @@ import { toast } from "sonner";
 
 interface SettingsPageProps {
   accessToken: string;
+  apiBaseUrl: string;
   user: any;
   onLogout: () => void;
 }
 
 export function SettingsPage({
   accessToken,
+  apiBaseUrl,
   user,
   onLogout,
 }: SettingsPageProps) {

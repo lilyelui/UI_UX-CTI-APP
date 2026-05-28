@@ -15,7 +15,6 @@ import {
   TableRow,
 } from "./ui/table";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import {
   Download,
@@ -45,19 +44,21 @@ interface HistoryEntry {
 
 interface HistoryPageProps {
   accessToken: string;
+  apiBaseUrl: string;
 }
 
 /* ── Constants ── */
 const WS_URL = "ws://localhost:5000/ws";
-const API_BASE = "http://localhost:5000";
 const PAGE_SIZE = 10;
 
 /* ── Helpers ── */
 const threatColor = (level: string) => {
   const l = level?.toUpperCase();
+
   if (l === "CRITICAL") return "destructive";
   if (l === "HIGH") return "destructive";
   if (l === "MEDIUM") return "default";
+
   return "secondary";
 };
 
@@ -68,44 +69,66 @@ const typeIcon = (type: string) => {
   if (type === "url") return "🔒";
   if (type === "subnet") return "📡";
   if (type === "asn") return "🏢";
+
   return "🔍";
 };
 
 /* ════════════════════════════════════
    COMPONENT
 ════════════════════════════════════ */
-export function HistoryPage({ accessToken }: HistoryPageProps) {
+export function HistoryPage({ accessToken, apiBaseUrl }: HistoryPageProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [wsConnected, setWsConnected] = useState(false);
-  const [downloading, setDownloading] = useState<string | null>(null); // reportId being downloaded
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
 
   /* ── Fetch initial history ── */
   const fetchHistory = useCallback(async () => {
+    if (!accessToken) {
+      console.warn("[history] accessToken is empty");
+      setHistory([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+
     try {
-      const res = await fetch(`${API_BASE}/history`);
+      const res = await fetch(`${apiBaseUrl}/history`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
       const data = await res.json();
-      if (data.success) {
-        setHistory(data.history);
-      } else {
-        toast.error("Failed to load history");
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load history");
       }
-    } catch (err) {
+
+      if (data.success) {
+        setHistory(data.history || []);
+      } else {
+        toast.error(data.error || "Failed to load history");
+      }
+    } catch (err: any) {
       console.error("[history]", err);
-      toast.error("Cannot connect to server");
+      toast.error(err.message || "Cannot connect to server");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiBaseUrl, accessToken]);
 
   /* ── WebSocket ── */
   const connectWS = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
@@ -118,13 +141,18 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+
         if (msg.type === "NEW_REPORT") {
           const entry: HistoryEntry = msg.data;
+
           setHistory((prev) => {
-            // prevent duplicate
-            if (prev.some((e) => e.reportId === entry.reportId)) return prev;
+            if (prev.some((e) => e.reportId === entry.reportId)) {
+              return prev;
+            }
+
             return [entry, ...prev];
           });
+
           toast.success(`New report: ${entry.reportId} (${entry.ioc})`);
         }
       } catch (e) {
@@ -132,19 +160,28 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
       }
     };
 
-    ws.onerror = () => setWsConnected(false);
+    ws.onerror = () => {
+      setWsConnected(false);
+    };
 
     ws.onclose = () => {
       setWsConnected(false);
-      // auto-reconnect after 3 s
-      setTimeout(() => connectWS(), 3000);
+
+      reconnectTimerRef.current = window.setTimeout(() => {
+        connectWS();
+      }, 3000);
     };
   }, []);
 
   useEffect(() => {
     fetchHistory();
     connectWS();
+
     return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+
       wsRef.current?.close();
     };
   }, [fetchHistory, connectWS]);
@@ -155,21 +192,32 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
     format: "pdf" | "docx",
   ) => {
     setDownloading(`${entry.reportId}-${format}`);
+
     try {
-      const res = await fetch(`${API_BASE}/api/export`, {
+      const res = await fetch(`${apiBaseUrl}/api/export`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: entry.aiAnalysis, format }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          content: entry.aiAnalysis,
+          format,
+        }),
       });
 
-      if (!res.ok) throw new Error("Export failed");
+      if (!res.ok) {
+        throw new Error("Export failed");
+      }
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
+
       const a = document.createElement("a");
       a.href = url;
       a.download = `${entry.reportId}.${format}`;
       a.click();
+
       URL.revokeObjectURL(url);
 
       toast.success(`Downloaded ${entry.reportId}.${format.toUpperCase()}`);
@@ -184,32 +232,31 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
   /* ── Filter & Pagination ── */
   const filtered = history.filter((e) => {
     const q = searchQuery.toLowerCase();
+
     if (!q) return true;
+
     return (
-      e.reportId.toLowerCase().includes(q) ||
-      e.username.toLowerCase().includes(q) ||
-      e.email.toLowerCase().includes(q) ||
-      e.ioc.toLowerCase().includes(q) ||
-      e.iocType.toLowerCase().includes(q) ||
-      e.threatLevel.toLowerCase().includes(q)
+      e.reportId?.toLowerCase().includes(q) ||
+      e.username?.toLowerCase().includes(q) ||
+      e.email?.toLowerCase().includes(q) ||
+      e.ioc?.toLowerCase().includes(q) ||
+      e.iocType?.toLowerCase().includes(q) ||
+      e.threatLevel?.toLowerCase().includes(q)
     );
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
+
   const paginated = filtered.slice(
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE,
   );
 
-  /* Reset to page 1 on search */
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
 
-  /* ═══════════════════════
-     RENDER
-  ═══════════════════════ */
   return (
     <div className="space-y-6 px-2 sm:px-0">
       {/* Header */}
@@ -225,12 +272,12 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
           >
             Analysis History
           </h1>
+
           <p className="text-muted-foreground text-sm sm:text-base">
-            Real-time log of all AI-generated threat intelligence reports
+            Real-time log of AI-generated threat intelligence reports
           </p>
         </div>
 
-        {/* WS Status + Refresh */}
         <div className="flex items-center gap-2">
           <span
             className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
@@ -249,6 +296,7 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
               </>
             )}
           </span>
+
           <Button
             size="sm"
             variant="outline"
@@ -264,7 +312,6 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
       </div>
 
       {/* Search */}
-      {/* Search */}
       <div style={{ position: "relative" }}>
         <Search
           style={{
@@ -278,6 +325,7 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
             pointerEvents: "none",
           }}
         />
+
         <input
           type="text"
           placeholder="Search by Report ID, Username, IOC, Type, or Threat Level..."
@@ -304,6 +352,7 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
             e.target.style.boxShadow = "0 1px 2px rgba(0,0,0,0.05)";
           }}
         />
+
         {searchQuery && (
           <button
             onClick={() => setSearchQuery("")}
@@ -353,6 +402,7 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
             <FileText className="h-5 w-5" />
             Downloaded Reports
           </CardTitle>
+
           <CardDescription className="text-xs sm:text-sm">
             Click Download to re-export any report as PDF or DOCX
           </CardDescription>
@@ -399,19 +449,16 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
 
                     return (
                       <TableRow key={entry.reportId}>
-                        {/* # */}
                         <TableCell className="text-xs text-muted-foreground">
                           {rowNum}
                         </TableCell>
 
-                        {/* Report ID */}
                         <TableCell>
                           <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
                             {entry.reportId}
                           </code>
                         </TableCell>
 
-                        {/* Username */}
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="text-xs font-semibold">
@@ -423,7 +470,6 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                           </div>
                         </TableCell>
 
-                        {/* Date */}
                         <TableCell className="text-xs whitespace-nowrap">
                           {new Date(entry.createdAt).toLocaleString("id-ID", {
                             day: "2-digit",
@@ -434,7 +480,6 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                           })}
                         </TableCell>
 
-                        {/* IOC */}
                         <TableCell>
                           <span
                             className="text-xs font-mono max-w-[160px] block truncate"
@@ -444,15 +489,13 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                           </span>
                         </TableCell>
 
-                        {/* Type */}
                         <TableCell>
                           <Badge variant="outline" className="text-xs gap-1">
                             {typeIcon(entry.iocType)}
-                            {entry.iocType.toUpperCase()}
+                            {entry.iocType?.toUpperCase()}
                           </Badge>
                         </TableCell>
 
-                        {/* Threat Level */}
                         <TableCell>
                           <Badge
                             variant={threatColor(entry.threatLevel)}
@@ -462,10 +505,8 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                           </Badge>
                         </TableCell>
 
-                        {/* Actions */}
                         <TableCell>
                           <div className="flex items-center gap-1.5 justify-center">
-                            {/* Download PDF */}
                             <Button
                               size="sm"
                               variant="default"
@@ -481,7 +522,6 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                               PDF
                             </Button>
 
-                            {/* Download DOCX */}
                             <Button
                               size="sm"
                               variant="outline"
@@ -526,10 +566,10 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
 
-                {/* Page numbers */}
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter((p) => {
                     if (totalPages <= 5) return true;
+
                     return (
                       Math.abs(p - safePage) <= 1 || p === 1 || p === totalPages
                     );
@@ -542,6 +582,7 @@ export function HistoryPage({ accessToken }: HistoryPageProps) {
                     ) {
                       acc.push("…");
                     }
+
                     acc.push(p);
                     return acc;
                   }, [])

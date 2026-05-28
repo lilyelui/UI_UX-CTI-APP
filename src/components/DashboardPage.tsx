@@ -75,9 +75,10 @@ function getUserFromToken(token: string): { username: string; email: string } {
 }
 interface DashboardPageProps {
   accessToken: string;
+    apiBaseUrl: string;
 }
 
-export function DashboardPage({ accessToken }: DashboardPageProps) {
+export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
   const [analysisValue, setAnalysisValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
