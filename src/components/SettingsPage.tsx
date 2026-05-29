@@ -53,7 +53,7 @@ export function SettingsPage({
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({ name }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -85,7 +85,7 @@ export function SettingsPage({
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 w-full">
       <div>
         <h1
           style={{

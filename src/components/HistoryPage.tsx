@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-import { projectId } from "../utils/supabase/info";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -16,202 +15,568 @@ import {
   TableRow,
 } from "./ui/table";
 import { Button } from "./ui/button";
-import { Download, Loader2, FileText } from "lucide-react";
+import { Input } from "./ui/input";
+import { Badge } from "./ui/badge";
+import {
+  Download,
+  Loader2,
+  FileText,
+  Search,
+  RefreshCw,
+  FileDown,
+  ChevronLeft,
+  ChevronRight,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { toast } from "sonner";
+
+/* ── Types ── */
+interface HistoryEntry {
+  reportId: string;
+  username: string;
+  email: string;
+  ioc: string;
+  iocType: string;
+  threatLevel: string;
+  aiAnalysis: string;
+  createdAt: string;
+}
 
 interface HistoryPageProps {
   accessToken: string;
 }
 
-interface HistoryItem {
-  analysisId: string;
-  fileName: string;
-  format: string;
-  downloadedAt: string;
-}
+/* ── Constants ── */
+const WS_URL = "ws://localhost:5000/ws";
+const API_BASE = "http://localhost:5000";
+const PAGE_SIZE = 10;
 
+/* ── Helpers ── */
+const threatColor = (level: string) => {
+  const l = level?.toUpperCase();
+  if (l === "CRITICAL") return "destructive";
+  if (l === "HIGH") return "destructive";
+  if (l === "MEDIUM") return "default";
+  return "secondary";
+};
+
+const typeIcon = (type: string) => {
+  if (type?.includes("hash")) return "🔐";
+  if (type === "ip") return "🌐";
+  if (type === "domain") return "🔗";
+  if (type === "url") return "🔒";
+  if (type === "subnet") return "📡";
+  if (type === "asn") return "🏢";
+  return "🔍";
+};
+
+/* ════════════════════════════════════
+   COMPONENT
+════════════════════════════════════ */
 export function HistoryPage({ accessToken }: HistoryPageProps) {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null); // reportId being downloaded
 
-  useEffect(() => {
-    loadHistory();
-  }, []);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  const loadHistory = async () => {
+  /* ── Fetch initial history ── */
+  const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/history`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error("History fetch error:", data);
+      const res = await fetch(`${API_BASE}/history`);
+      const data = await res.json();
+      if (data.success) {
+        setHistory(data.history);
+      } else {
         toast.error("Failed to load history");
-        return;
       }
-
-      setHistory(data.history || []);
-    } catch (error) {
-      console.error("History fetch processing error:", error);
-      toast.error("Failed to load history");
+    } catch (err) {
+      console.error("[history]", err);
+      toast.error("Cannot connect to server");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleRedownload = async (item: HistoryItem) => {
-    try {
-      // Fetch the original analysis
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/analysis/${item.analysisId}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
+  /* ── WebSocket ── */
+  const connectWS = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsConnected(true);
+      console.log("[WS] Connected to history feed");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "NEW_REPORT") {
+          const entry: HistoryEntry = msg.data;
+          setHistory((prev) => {
+            // prevent duplicate
+            if (prev.some((e) => e.reportId === entry.reportId)) return prev;
+            return [entry, ...prev];
+          });
+          toast.success(`New report: ${entry.reportId} (${entry.ioc})`);
         }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error("Analysis fetch error:", data);
-        toast.error("Failed to fetch analysis data");
-        return;
+      } catch (e) {
+        console.warn("[WS] Bad message", e);
       }
+    };
 
-      // Generate downloadable file content
-      const content = generateReportContent(data.analysis);
-      const blob = new Blob([content], { type: "text/plain" });
+    ws.onerror = () => setWsConnected(false);
+
+    ws.onclose = () => {
+      setWsConnected(false);
+      // auto-reconnect after 3 s
+      setTimeout(() => connectWS(), 3000);
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchHistory();
+    connectWS();
+    return () => {
+      wsRef.current?.close();
+    };
+  }, [fetchHistory, connectWS]);
+
+  /* ── Download handler ── */
+  const handleDownload = async (
+    entry: HistoryEntry,
+    format: "pdf" | "docx",
+  ) => {
+    setDownloading(`${entry.reportId}-${format}`);
+    try {
+      const res = await fetch(`${API_BASE}/api/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: entry.aiAnalysis, format }),
+      });
+
+      if (!res.ok) throw new Error("Export failed");
+
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = item.fileName;
+      a.download = `${entry.reportId}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
 
-      toast.success("Report re-downloaded successfully");
-    } catch (error) {
-      console.error("Re-download error:", error);
-      toast.error("Failed to re-download report");
+      toast.success(`Downloaded ${entry.reportId}.${format.toUpperCase()}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Download failed");
+    } finally {
+      setDownloading(null);
     }
   };
 
-  const generateReportContent = (analysis: any) => {
-    return `
-CYBER THREAT INTELLIGENCE REPORT
-================================
-
-Analysis Type: ${analysis.type?.toUpperCase() || "N/A"}
-Analysis Target: ${analysis.value || "N/A"}
-Generated: ${new Date(analysis.timestamp).toLocaleString()}
-
-${analysis.aiAnalysis || "No AI analysis available"}
-
----
-RAW DATA
----
-
-VirusTotal Data:
-${JSON.stringify(analysis.vtData, null, 2)}
-
-${
-  analysis.abuseData
-    ? `\nAbuseIPDB Data:\n${JSON.stringify(analysis.abuseData, null, 2)}`
-    : ""
-}
-`;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  if (loading) {
+  /* ── Filter & Pagination ── */
+  const filtered = history.filter((e) => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return true;
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
+      e.reportId.toLowerCase().includes(q) ||
+      e.username.toLowerCase().includes(q) ||
+      e.email.toLowerCase().includes(q) ||
+      e.ioc.toLowerCase().includes(q) ||
+      e.iocType.toLowerCase().includes(q) ||
+      e.threatLevel.toLowerCase().includes(q)
     );
-  }
+  });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginated = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  /* Reset to page 1 on search */
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  /* ═══════════════════════
+     RENDER
+  ═══════════════════════ */
   return (
-    <div className="space-y-6">
-      <div>
-        <h1
-          style={{
-            fontSize: "2.25rem",
-            fontWeight: "var(--font-weight-bold)",
-            letterSpacing: "-0.02em",
-            marginBottom: "0.5rem",
-          }}
-        >
-          Download History
-        </h1>
-        <p className="text-muted-foreground" style={{ fontSize: "0.9375rem" }}>
-          View and re-download your previous threat analysis reports
-        </p>
+    <div className="space-y-6 px-2 sm:px-0">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1
+            className="text-2xl sm:text-3xl lg:text-4xl"
+            style={{
+              fontWeight: "var(--font-weight-bold)",
+              letterSpacing: "-0.02em",
+              marginBottom: "0.5rem",
+            }}
+          >
+            Analysis History
+          </h1>
+          <p className="text-muted-foreground text-sm sm:text-base">
+            Real-time log of all AI-generated threat intelligence reports
+          </p>
+        </div>
+
+        {/* WS Status + Refresh */}
+        <div className="flex items-center gap-2">
+          <span
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${
+              wsConnected
+                ? "bg-green-50 text-green-700 border-green-200"
+                : "bg-red-50 text-red-700 border-red-200"
+            }`}
+          >
+            {wsConnected ? (
+              <>
+                <Wifi className="h-3 w-3" /> Live
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3 w-3" /> Disconnected
+              </>
+            )}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={fetchHistory}
+            disabled={loading}
+          >
+            <RefreshCw
+              className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </Button>
+        </div>
       </div>
 
+      {/* Search */}
+      {/* Search */}
+      <div style={{ position: "relative" }}>
+        <Search
+          style={{
+            position: "absolute",
+            left: "12px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: "16px",
+            height: "16px",
+            color: "#9ca3af",
+            pointerEvents: "none",
+          }}
+        />
+        <input
+          type="text"
+          placeholder="Search by Report ID, Username, IOC, Type, or Threat Level..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: "100%",
+            paddingLeft: "40px",
+            paddingRight: searchQuery ? "40px" : "12px",
+            height: "40px",
+            borderRadius: "8px",
+            border: "1px solid #d1d5db",
+            backgroundColor: "#ffffff",
+            fontSize: "14px",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+            outline: "none",
+          }}
+          onFocus={(e) => {
+            e.target.style.border = "1px solid #3b82f6";
+            e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.15)";
+          }}
+          onBlur={(e) => {
+            e.target.style.border = "1px solid #d1d5db";
+            e.target.style.boxShadow = "0 1px 2px rgba(0,0,0,0.05)";
+          }}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            style={{
+              position: "absolute",
+              right: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#9ca3af",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Stats summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total Reports", value: history.length },
+          { label: "Filtered", value: filtered.length },
+          {
+            label: "Critical / High",
+            value: history.filter((e) =>
+              ["CRITICAL", "HIGH"].includes(e.threatLevel?.toUpperCase()),
+            ).length,
+          },
+          { label: "This Page", value: paginated.length },
+        ].map((s) => (
+          <Card key={s.label} className="py-3">
+            <CardContent className="p-3">
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+              <p className="text-2xl font-bold">{s.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Table Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Downloaded Reports</CardTitle>
-          <CardDescription>
-            All reports you've downloaded are stored here for easy access
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <FileText className="h-5 w-5" />
+            Downloaded Reports
+          </CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Click Download to re-export any report as PDF or DOCX
           </CardDescription>
         </CardHeader>
+
         <CardContent>
-          {history.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No download history yet</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Downloaded reports will appear here
+          {loading ? (
+            <div className="flex items-center justify-center h-40 gap-2 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="text-sm">Loading history...</span>
+            </div>
+          ) : paginated.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
+              <FileText className="h-10 w-10 opacity-40" />
+              <p className="text-sm">
+                {searchQuery
+                  ? "No results match your search."
+                  : "No analysis history yet."}
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Format</TableHead>
-                  <TableHead>Downloaded At</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((item, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{item.fileName}</TableCell>
-                    <TableCell>
-                      <span className="uppercase text-xs bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">
-                        {item.format}
-                      </span>
-                    </TableCell>
-                    <TableCell>{formatDate(item.downloadedAt)}</TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleRedownload(item)}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Re-download
-                      </Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs w-10">#</TableHead>
+                    <TableHead className="text-xs">Report ID</TableHead>
+                    <TableHead className="text-xs">Username</TableHead>
+                    <TableHead className="text-xs">Date</TableHead>
+                    <TableHead className="text-xs">IOC</TableHead>
+                    <TableHead className="text-xs">Type</TableHead>
+                    <TableHead className="text-xs">Threat</TableHead>
+                    <TableHead className="text-xs text-center">
+                      Actions
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+
+                <TableBody>
+                  {paginated.map((entry, idx) => {
+                    const rowNum = (safePage - 1) * PAGE_SIZE + idx + 1;
+                    const pdfKey = `${entry.reportId}-pdf`;
+                    const docxKey = `${entry.reportId}-docx`;
+
+                    return (
+                      <TableRow key={entry.reportId}>
+                        {/* # */}
+                        <TableCell className="text-xs text-muted-foreground">
+                          {rowNum}
+                        </TableCell>
+
+                        {/* Report ID */}
+                        <TableCell>
+                          <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+                            {entry.reportId}
+                          </code>
+                        </TableCell>
+
+                        {/* Username */}
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold">
+                              {entry.username}
+                            </span>
+                            <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+                              {entry.email}
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        {/* Date */}
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {new Date(entry.createdAt).toLocaleString("id-ID", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </TableCell>
+
+                        {/* IOC */}
+                        <TableCell>
+                          <span
+                            className="text-xs font-mono max-w-[160px] block truncate"
+                            title={entry.ioc}
+                          >
+                            {entry.ioc}
+                          </span>
+                        </TableCell>
+
+                        {/* Type */}
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs gap-1">
+                            {typeIcon(entry.iocType)}
+                            {entry.iocType.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Threat Level */}
+                        <TableCell>
+                          <Badge
+                            variant={threatColor(entry.threatLevel)}
+                            className="text-xs"
+                          >
+                            {entry.threatLevel || "N/A"}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 justify-center">
+                            {/* Download PDF */}
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-7 px-2 text-xs gap-1"
+                              disabled={downloading === pdfKey}
+                              onClick={() => handleDownload(entry, "pdf")}
+                            >
+                              {downloading === pdfKey ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <FileDown className="h-3 w-3" />
+                              )}
+                              PDF
+                            </Button>
+
+                            {/* Download DOCX */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs gap-1"
+                              disabled={downloading === docxKey}
+                              onClick={() => handleDownload(entry, "docx")}
+                            >
+                              {downloading === docxKey ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Download className="h-3 w-3" />
+                              )}
+                              DOCX
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {!loading && filtered.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <p className="text-xs text-muted-foreground">
+                Showing {(safePage - 1) * PAGE_SIZE + 1}–
+                {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
+                {filtered.length} results
+              </p>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  disabled={safePage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                {/* Page numbers */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => {
+                    if (totalPages <= 5) return true;
+                    return (
+                      Math.abs(p - safePage) <= 1 || p === 1 || p === totalPages
+                    );
+                  })
+                  .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                    if (
+                      i > 0 &&
+                      typeof arr[i - 1] === "number" &&
+                      (p as number) - (arr[i - 1] as number) > 1
+                    ) {
+                      acc.push("…");
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === "…" ? (
+                      <span
+                        key={`ellipsis-${i}`}
+                        className="px-1 text-muted-foreground text-sm"
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <Button
+                        key={p}
+                        size="sm"
+                        variant={p === safePage ? "default" : "outline"}
+                        className="h-8 w-8 p-0 text-xs"
+                        onClick={() => setCurrentPage(p as number)}
+                      >
+                        {p}
+                      </Button>
+                    ),
+                  )}
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  disabled={safePage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

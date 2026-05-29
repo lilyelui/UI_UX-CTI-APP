@@ -58,6 +58,21 @@ import {
 } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import ReactMarkdown from "react-markdown";
+
+function getUserFromToken(token: string): { username: string; email: string } {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return {
+      email: payload.email ?? "unknown@-",
+      username:
+        payload.user_metadata?.full_name ??
+        payload.email?.split("@")[0] ??
+        "Unknown",
+    };
+  } catch {
+    return { username: "Unknown", email: "unknown@-" };
+  }
+}
 interface DashboardPageProps {
   accessToken: string;
 }
@@ -136,8 +151,11 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
 
     try {
       // ✅ 1. START DARI MOCK (biar UI tetap tampil dulu)
-      let finalResult: any = {};
-
+      let finalResult: any = {
+        indicator: analysisValue,
+        type,
+      };
+      const { username, email } = getUserFromToken(accessToken);
       // 🔥 2. FETCH API PARALLEL
       const [chatRes, apiRes] = await Promise.all([
         fetch("http://localhost:5000/chat", {
@@ -148,6 +166,8 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
           body: JSON.stringify({
             indicator: analysisValue,
             type,
+            username, // ← TAMBAH
+            email, // ← TAMBAH
           }),
         }),
         fetch("http://localhost:5000/api/analyze", {
@@ -174,10 +194,18 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       console.log("API FULL:", apiData);
 
       if (chatData?.success) {
-        finalResult.aiAnalysis          = chatData.aiAnalysis;
-        finalResult.vtData              = chatData.vtData;
-        finalResult.abuseData           = chatData.abuseData;
-        finalResult.mispData            = chatData.mispData;
+        finalResult.reportId = chatData.reportId;
+        finalResult.severity = chatData.severity;
+        finalResult.abuseipdb = chatData.abuseipdb;
+        finalResult.cveMatches = chatData.cveMatches || [];
+        finalResult.cveRiskScore = chatData.cveRiskScore || null;
+        finalResult.whoisData = chatData.whoisData || null;
+        finalResult.history = chatData.history || null;
+        finalResult.pe_header = chatData.pe_header || null;
+        finalResult.aiAnalysis = chatData.aiAnalysis;
+        finalResult.vtData = chatData.vtData;
+        finalResult.abuseData = chatData.abuseData;
+        finalResult.mispData = chatData.mispData;
         finalResult.correlationInsights = chatData.correlationInsights;
         finalResult.confidence = chatData.confidence;
         finalResult.reasoning = chatData.reasoning;
@@ -195,10 +223,10 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
         finalResult.mitigationDetails = finalResult.mitreMitigations;
         finalResult.nvdData = chatData.nvdData;
         finalResult.virusTotalIntel = chatData.virusTotalIntel ?? null;
-        finalResult.stats       = chatData.vtData?.stats;
-        finalResult.vendors     = chatData.vtData?.vendors;
+        finalResult.stats = chatData.vtData?.stats;
+        finalResult.vendors = chatData.vtData?.vendors;
         finalResult.threatLevel = chatData.vtData?.threatLevel;
-        finalResult.total       = chatData.vtData?.total;
+        finalResult.total = chatData.vtData?.total;
       }
       console.log(finalResult.virusTotalIntel);
       // 🔥 4. OVERRIDE DATA DARI UNIFIED API
@@ -294,31 +322,108 @@ export function DashboardPage({ accessToken }: DashboardPageProps) {
       setLoading(false);
     }
   };
-  const handleDownload = async (format: "pdf" | "docx") => {
-    if (!analysisResult?.aiAnalysis) return;
+  const handleDownload = async (format: "pdf" | "docx" | "json") => {
+    if (!analysisResult) return;
 
     try {
-      const res = await fetch("http://localhost:5000/api/export", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content: analysisResult.aiAnalysis,
-          format,
-        }),
-      });
+      let res: Response;
+
+      if (format === "json") {
+        const stixPayload = {
+          ...analysisResult,
+          indicator: analysisResult.indicator,
+          type: analysisResult.type,
+          reportId: analysisResult.reportId || `REPORT-${Date.now()}`,
+
+          malicious: analysisResult?.stats?.malicious || 0,
+          suspicious: analysisResult?.stats?.suspicious || 0,
+          harmless: analysisResult?.stats?.harmless || 0,
+          undetected: analysisResult?.stats?.undetected || 0,
+          totalVendors: analysisResult?.total || 0,
+
+          abuseScore:
+            analysisResult?.abuseData?.data?.abuse_confidence_score ||
+            analysisResult?.abuseipdb?.abuse_confidence_score ||
+            0,
+
+          totalReports:
+            analysisResult?.abuseData?.data?.totalReports ||
+            analysisResult?.abuseData?.data?.total_reports ||
+            analysisResult?.abuseipdb?.total_reports ||
+            0,
+
+          abuseipdb:
+            analysisResult?.abuseipdb ||
+            analysisResult?.abuseData?.data ||
+            null,
+
+          mispData: analysisResult?.mispData || {},
+          cveMatches: analysisResult?.cveMatches || [],
+          cveRiskScore: analysisResult?.cveRiskScore || null,
+
+          mitreData: {
+            techniques: Array.isArray(analysisResult?.mitreTechniqueDetails)
+              ? analysisResult.mitreTechniqueDetails
+              : [],
+            mitigations: Array.isArray(analysisResult?.mitreMitigations)
+              ? analysisResult.mitreMitigations
+              : [],
+          },
+
+          whoisData: analysisResult?.whoisData || null,
+          history: analysisResult?.history || null,
+          pe_header: analysisResult?.pe_header || null,
+          correlationInsights: analysisResult?.correlationInsights || "",
+        };
+
+        res = await fetch("http://localhost:5000/export/stix", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(stixPayload),
+        });
+      } else {
+        if (!analysisResult?.aiAnalysis) return;
+
+        res = await fetch("http://localhost:5000/api/export", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content: analysisResult.aiAnalysis,
+            format,
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || `Export failed with status ${res.status}`);
+      }
 
       const blob = await res.blob();
-
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
 
       a.href = url;
-      a.download = `Threat Intelligence Report.${format}`;
-      a.click();
+      a.download =
+        format === "json"
+          ? `Threat Intelligence STIX.json`
+          : `Threat Intelligence Report.${format}`;
 
-      toast.success(`Report downloaded as ${format.toUpperCase()}`);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      toast.success(
+        format === "json"
+          ? "STIX JSON downloaded successfully"
+          : `Report downloaded as ${format.toUpperCase()}`,
+      );
     } catch (error) {
       console.error("Download error:", error);
       toast.error("Failed to download report");
@@ -477,13 +582,43 @@ ${JSON.stringify(result.abuseData, null, 2)}
         ? 30
         : misp?.confidence === "Medium"
           ? 15
-          : 5);
+          : 0);
+
+    const hasMisp = mispScore > 0;
+    const hasAbuse = abuse > 0;
+
+    let vtWeight: number;
+    let abuseWeight: number;
+    let mispWeight: number;
+
+    if (hasMisp && hasAbuse) {
+      vtWeight = 0.5;
+      abuseWeight = 0.2;
+      mispWeight = 0.3;
+    } else if (hasMisp && !hasAbuse) {
+      vtWeight = 0.65;
+      abuseWeight = 0.0;
+      mispWeight = 0.35;
+    } else if (!hasMisp && hasAbuse) {
+      vtWeight = 0.65;
+      abuseWeight = 0.35;
+      mispWeight = 0.0;
+    } else {
+      vtWeight = 1.0;
+      abuseWeight = 0.0;
+      mispWeight = 0.0;
+    }
+
+    const confidence = Math.min(
+      vtRatio * 100 * vtWeight + abuse * abuseWeight + mispScore * mispWeight,
+      100,
+    );
 
     return {
       malware: vtRatio * 100,
       reputation: abuse,
       intel: Math.min(mispScore, 100),
-      confidence: vtRatio * 40 + (abuse / 100) * 30 + (mispScore / 100) * 30,
+      confidence: Math.min(confidence, 100),
     };
   };
 
@@ -492,10 +627,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
     const scores = getCorrelationScores();
 
     return [
-      { metric: "Malware", score: scores.malware },
-      { metric: "Reputation", score: scores.reputation },
-      { metric: "Intel", score: scores.intel },
-      { metric: "Confidence", score: scores.confidence },
+      { metric: "VirusTotal Rating", score: scores.malware },
+      { metric: "Abuse Reputation", score: scores.reputation },
+      { metric: "MISP Intelligence", score: scores.intel },
+      { metric: "Confidence Total", score: scores.confidence },
       { metric: "History", score: scores.intel * 0.8 },
     ];
   };
@@ -555,7 +690,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 <div className="relative">
                   <Input
                     id="indicator"
-                    placeholder="Enter IP, Domain, URL, Hash (MD5/SHA1/SHA256), Subnet, or ASN..."
+                    placeholder="Enter IP, Domain, URL, or Hash (MD5/SHA1/SHA256)"
                     value={analysisValue}
                     onChange={(e) => handleInputChange(e.target.value)}
                     required
@@ -808,7 +943,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 intel.crowdsourced_context.length > 0;
               const generalCVEs =
                 intel.cve_extracted?.filter(
-                  (c: string) => !intel.yara_cves?.includes(c)
+                  (c: string) => !intel.yara_cves?.includes(c),
                 ) ?? [];
 
               const showCveDetected =
@@ -984,89 +1119,93 @@ ${JSON.stringify(result.abuseData, null, 2)}
                         </p>
 
                         <div className="space-y-2">
-                          {intel.crowdsourced_context.map((ctx: any, i: number) => {
-                            const detailText =
-                              ctx.detail ||
-                              ctx.details ||
-                              ctx.description ||
-                              "";
+                          {intel.crowdsourced_context.map(
+                            (ctx: any, i: number) => {
+                              const detailText =
+                                ctx.detail ||
+                                ctx.details ||
+                                ctx.description ||
+                                "";
 
-                            const titleText =
-                              ctx.title ||
-                              "Untitled";
+                              const titleText = ctx.title || "Untitled";
 
-                            const severity =
-                              (ctx.severity || "low").toUpperCase();
+                              const severity = (
+                                ctx.severity || "low"
+                              ).toUpperCase();
 
-                            return (
-                              <div
-                                key={i}
-                                className="flex items-start justify-between rounded-lg border p-3 gap-3"
-                              >
-                                <div className="space-y-1 flex-1">
-                                  {/* Source */}
-                                  {ctx.source && (
-                                    <p className="text-xs font-semibold">
-                                      {ctx.source}
-                                    </p>
-                                  )}
-
-                                  {/* Title */}
-                                  <p className="text-sm font-medium">
-                                    {titleText}
-                                  </p>
-
-                                  {/* Detail */}
-                                  {detailText.trim() !== "" ? (
-                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                      {detailText}
-                                    </p>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground italic">
-                                      No detail available
-                                    </p>
-                                  )}
-
-                                  {/* CVE tags */}
-                                  {ctx.cve?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {ctx.cve.map((cve: string, j: number) => {
-                                        const url =
-                                          "https://nvd.nist.gov/vuln/detail/" + cve;
-
-                                        return (
-                                          <a
-                                            key={j}
-                                            href={url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
-                                          >
-                                            {cve}
-                                          </a>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Severity badge */}
-                                <Badge
-                                  variant={
-                                    severity === "HIGH" ||
-                                    severity === "CRITICAL"
-                                      ? "destructive"
-                                      : severity === "MEDIUM"
-                                        ? "default"
-                                        : "secondary"
-                                  }
-                                  className="text-xs shrink-0"
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex items-start justify-between rounded-lg border p-3 gap-3"
                                 >
-                                  {severity}
-                                </Badge>
-                              </div>
-                            );
-                          })}
+                                  <div className="space-y-1 flex-1">
+                                    {/* Source */}
+                                    {ctx.source && (
+                                      <p className="text-xs font-semibold">
+                                        {ctx.source}
+                                      </p>
+                                    )}
+
+                                    {/* Title */}
+                                    <p className="text-sm font-medium">
+                                      {titleText}
+                                    </p>
+
+                                    {/* Detail */}
+                                    {detailText.trim() !== "" ? (
+                                      <p className="text-xs text-muted-foreground leading-relaxed">
+                                        {detailText}
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground italic">
+                                        No detail available
+                                      </p>
+                                    )}
+
+                                    {/* CVE tags */}
+                                    {ctx.cve?.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {ctx.cve.map(
+                                          (cve: string, j: number) => {
+                                            const url =
+                                              "https://nvd.nist.gov/vuln/detail/" +
+                                              cve;
+
+                                            return (
+                                              <a
+                                                key={j}
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
+                                              >
+                                                {cve}
+                                              </a>
+                                            );
+                                          },
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Severity badge */}
+                                  <Badge
+                                    variant={
+                                      severity === "HIGH" ||
+                                      severity === "CRITICAL"
+                                        ? "destructive"
+                                        : severity === "MEDIUM"
+                                          ? "default"
+                                          : "secondary"
+                                    }
+                                    className="text-xs shrink-0"
+                                  >
+                                    {severity}
+                                  </Badge>
+                                </div>
+                              );
+                            },
+                          )}
                         </div>
                       </div>
                     )}
@@ -1240,7 +1379,8 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
                         <div className="space-y-2">
                           {intel.yara_cves.map((cve: string, i: number) => {
-                            const url = "https://nvd.nist.gov/vuln/detail/" + cve;
+                            const url =
+                              "https://nvd.nist.gov/vuln/detail/" + cve;
 
                             return (
                               <div
@@ -1248,7 +1388,9 @@ ${JSON.stringify(result.abuseData, null, 2)}
                                 className="flex items-center justify-between rounded-lg border p-3"
                               >
                                 <div className="flex flex-wrap gap-2 items-center">
-                                  <span className="text-sm font-mono">{cve}</span>
+                                  <span className="text-sm font-mono">
+                                    {cve}
+                                  </span>
 
                                   <a
                                     href={url}
@@ -1260,7 +1402,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
                                   </a>
                                 </div>
 
-                                <Badge variant="destructive" className="text-xs">
+                                <Badge
+                                  variant="destructive"
+                                  className="text-xs"
+                                >
                                   YARA
                                 </Badge>
                               </div>
@@ -1277,7 +1422,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
           {/* 7. Security Vendor Analysis */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base sm:text-lg">
+              <CardTitle
+                className="text-base sm:text-lg"
+                style={{ fontWeight: 700 }}
+              >
                 Security Vendor Analysis
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
@@ -1289,13 +1437,13 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs sm:text-sm">
+                      <TableHead className="text-xs font-semibold sm:text-sm">
                         Vendor
                       </TableHead>
-                      <TableHead className="text-xs sm:text-sm">
+                      <TableHead className="text-xs font-semibold sm:text-sm">
                         Category
                       </TableHead>
-                      <TableHead className="text-xs sm:text-sm">
+                      <TableHead className="text-xs font-semibold sm:text-sm">
                         Result
                       </TableHead>
                     </TableRow>
@@ -1307,18 +1455,24 @@ ${JSON.stringify(result.abuseData, null, 2)}
                           {vendor.vendor}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={
-                              vendor.category === "malicious"
-                                ? "destructive"
-                                : vendor.category === "suspicious"
-                                  ? "default"
-                                  : "secondary"
-                            }
-                            className="text-xs"
-                          >
-                            {vendor.category}
-                          </Badge>
+                          {(() => {
+                            const categoryColors: Record<string, string> = {
+                              malicious: "#ef4444",
+                              suspicious: "#f59e0b",
+                              harmless: "#10b981",
+                              undetected: "#6b7280",
+                            };
+                            const color =
+                              categoryColors[vendor.category] ?? "#6b7280";
+                            return (
+                              <Badge
+                                className="text-xs text-white border-0"
+                                style={{ backgroundColor: color }}
+                              >
+                                {vendor.category}
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-xs sm:text-sm">
                           {vendor.result}
@@ -1536,17 +1690,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   </div>
 
                   <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Confidence</p>
-                    <p
-                      className={`text-2xl font-bold ${
-                        getMISPData()?.confidence === "High"
-                          ? "text-red-600"
-                          : getMISPData()?.confidence === "Medium"
-                            ? "text-yellow-500"
-                            : "text-green-600"
-                      }`}
-                    >
-                      {getMISPData()?.confidence || "Low"}
+                    <p className="text-xs text-muted-foreground">Title</p>
+
+                    <p className="text-sm font-semibold break-words">
+                      {getMISPData()?.title ?? "-"}
                     </p>
                   </div>
 
@@ -1560,9 +1707,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   </div>
 
                   <div className="rounded-lg border p-4">
-                    <p className="text-xs text-muted-foreground">Score </p>
+                    <p className="text-xs text-muted-foreground">Attributes</p>
+
                     <p className="text-2xl font-bold">
-                      {getMISPData()?.score || "-"}
+                      {getMISPData()?.attributes ?? "-"}
                     </p>
                   </div>
                 </div>
@@ -1835,7 +1983,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
           <Card>
             <CardHeader>
               <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <span className="text-base sm:text-lg flex items-center gap-2">
+                <span
+                  className="text-base sm:text-lg flex items-center gap-2"
+                  style={{ fontWeight: 700 }}
+                >
                   <Activity className="h-5 w-5" />
                   AI-Generated Analysis Report
                 </span>
@@ -1856,6 +2007,15 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   >
                     <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
                     Download DOCX
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownload("json")}
+                    className="text-xs sm:text-sm"
+                  >
+                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    Download STIX JSON
                   </Button>
                 </div>
               </CardTitle>
@@ -1934,7 +2094,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 <div className="mt-2 space-y-1 text-xs sm:text-sm">
                   <div>
                     <strong>MITRE Techniques:</strong>{" "}
-                      {analysisResult.mitreTechniques?.join(", ")}
+                    {analysisResult.mitreTechniques?.join(", ")}
                   </div>
                 </div>
               )}
