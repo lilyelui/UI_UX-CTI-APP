@@ -27,6 +27,15 @@ export function AppSidebar({
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
+  const displayName =
+    user?.user_metadata?.name ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.preferred_username ||
+    user?.email?.split("@")[0] ||
+    "User";
+
+  const displayInitial =
+    displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
 
   const navigationItems = [
     {
@@ -192,11 +201,7 @@ export function AppSidebar({
                   fontWeight: "var(--font-weight-semibold)",
                 }}
               >
-                <span className="text-xs sm:text-sm">
-                  {user?.user_metadata?.name?.[0]?.toUpperCase() ||
-                    user?.email?.[0]?.toUpperCase() ||
-                    "U"}
-                </span>
+                <span className="text-xs sm:text-sm">{displayInitial}</span>
               </div>
 
               <div className="flex-1 min-w-0">
@@ -207,7 +212,7 @@ export function AppSidebar({
                     fontWeight: "var(--font-weight-medium)",
                   }}
                 >
-                  {user?.user_metadata?.name || "User"}
+                  {displayName}
                 </p>
 
                 <p

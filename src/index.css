@@ -2530,3 +2530,86 @@ html {
     transform: rotate(360deg);
   }
 }
+
+.cyber-loading-spinner {
+  width: 64px;
+  height: 64px;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, #06b6d4, #0ea5e9, #2563eb, #06b6d4);
+  animation: cyberSpin 0.8s linear infinite;
+  position: relative;
+}
+
+.cyber-loading-spinner::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: 9999px;
+  background: var(--background);
+}
+
+@keyframes cyberSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-dots::after {
+  content: ".";
+  animation: loadingDots 1.2s infinite steps(1, end);
+}
+
+@keyframes loadingDots {
+  0% {
+    content: ".";
+  }
+
+  33% {
+    content: "..";
+  }
+
+  66% {
+    content: "...";
+  }
+
+  100% {
+    content: ".";
+  }
+}
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.45s ease-out both;
+}
+
+.ai-typing-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 16px;
+  margin-left: 3px;
+  background: var(--primary);
+  vertical-align: middle;
+  animation: aiCursorBlink 0.8s infinite;
+}
+
+@keyframes aiCursorBlink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  46%,
+  100% {
+    opacity: 0;
+  }
+}

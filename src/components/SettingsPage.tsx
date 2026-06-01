@@ -36,43 +36,59 @@ export function SettingsPage({
 
   useEffect(() => {
     if (user) {
-      setName(user.user_metadata?.name || "");
+      setName(
+        user.user_metadata?.name ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.preferred_username ||
+          "",
+      );
       setEmail(user.email || "");
     }
   }, [user]);
 
- const handleUpdateProfile = async (e: React.FormEvent) => {
-  e.preventDefault();
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const cleanName = name.trim();
+    const cleanName = name.trim();
 
-  if (!cleanName) {
-    toast.error("Full name cannot be empty");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const response = await fetch(`${apiBaseUrl}/profile`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ name: cleanName }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Profile update error:", data);
-      toast.error(`Update failed: ${data.error || "Unknown error"}`);
+    if (!cleanName) {
+      toast.error("Full name cannot be empty");
       return;
     }
 
-    const updatedUser =
-      data.user || {
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name: cleanName }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Profile update error:", data);
+        toast.error(`Update failed: ${data.error || "Unknown error"}`);
+        return;
+      }
+      const { data: localUserData, error: localUpdateError } =
+        await supabase.auth.updateUser({
+          data: {
+            ...user?.user_metadata,
+            name: cleanName,
+            full_name: cleanName,
+          },
+        });
+
+      if (localUpdateError) {
+        console.warn("Local Supabase user update warning:", localUpdateError);
+      }
+
+      const updatedUser = localUserData.user || {
         ...user,
         user_metadata: {
           ...user?.user_metadata,
@@ -81,18 +97,17 @@ export function SettingsPage({
         },
       };
 
-    onUserUpdate(updatedUser);
+      onUserUpdate(updatedUser);
+      setName(cleanName);
 
-    setName(cleanName);
-
-    toast.success("Profile updated successfully!");
-  } catch (error) {
-    console.error("Profile update processing error:", error);
-    toast.error("Profile update failed. Please try again.");
-  } finally {
-    setLoading(false);
-  }
-};
+      toast.success("Profile updated successfully!");
+    } catch (error) {
+      console.error("Profile update processing error:", error);
+      toast.error("Profile update failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {

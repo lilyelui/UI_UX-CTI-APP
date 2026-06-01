@@ -75,7 +75,7 @@ function getUserFromToken(token: string): { username: string; email: string } {
 }
 interface DashboardPageProps {
   accessToken: string;
-    apiBaseUrl: string;
+  apiBaseUrl: string;
 }
 
 export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
@@ -85,6 +85,90 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
   const [detectedType, setDetectedType] = useState<string>("");
   const [showReports, setShowReports] = useState(false);
 
+  const [visibleSections, setVisibleSections] = useState({
+    overview: false,
+    charts: false,
+    virustotal: false,
+    vendors: false,
+    abuse: false,
+    misp: false,
+    correlation: false,
+    ai: false,
+    mitigation: false,
+  });
+
+  const [typedAiAnalysis, setTypedAiAnalysis] = useState("");
+  const [isTypingAi, setIsTypingAi] = useState(false);
+  const delay = (ms: number) => {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  };
+
+  const resetProgressiveView = () => {
+    setVisibleSections({
+      overview: false,
+      charts: false,
+      virustotal: false,
+      vendors: false,
+      abuse: false,
+      misp: false,
+      correlation: false,
+      ai: false,
+      mitigation: false,
+    });
+
+    setTypedAiAnalysis("");
+    setIsTypingAi(false);
+  };
+
+  const typeAiReport = async (text: string) => {
+    setTypedAiAnalysis("");
+    setIsTypingAi(true);
+
+    const words = String(text || "").split(" ");
+
+    for (let i = 0; i < words.length; i++) {
+      setTypedAiAnalysis((prev) => prev + words[i] + " ");
+      await delay(25);
+    }
+
+    setIsTypingAi(false);
+  };
+
+  const revealSections = async (result: any) => {
+    setVisibleSections((prev) => ({ ...prev, overview: true }));
+    await delay(350);
+
+    setVisibleSections((prev) => ({ ...prev, charts: true }));
+    await delay(350);
+
+    if (result?.virusTotalIntel) {
+      setVisibleSections((prev) => ({ ...prev, virustotal: true }));
+      await delay(350);
+    }
+
+    setVisibleSections((prev) => ({ ...prev, vendors: true }));
+    await delay(350);
+
+    if (result?.abuseData || result?.abuseipdb) {
+      setVisibleSections((prev) => ({ ...prev, abuse: true }));
+      await delay(350);
+    }
+
+    if (result?.mispData) {
+      setVisibleSections((prev) => ({ ...prev, misp: true }));
+      await delay(350);
+    }
+
+    if (result?.correlationInsights) {
+      setVisibleSections((prev) => ({ ...prev, correlation: true }));
+      await delay(350);
+    }
+
+    setVisibleSections((prev) => ({ ...prev, ai: true }));
+    await typeAiReport(result?.aiAnalysis || "");
+
+    setVisibleSections((prev) => ({ ...prev, mitigation: true }));
+  };
   // Auto-detect input type
   const detectInputType = (value: string): string => {
     const trimmedValue = value.trim();
@@ -135,6 +219,7 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
     e.preventDefault();
     setLoading(true);
     setAnalysisResult(null);
+    resetProgressiveView();
 
     const type = detectInputType(analysisValue);
 
@@ -315,6 +400,7 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
       setDetectedType("");
 
       toast.success("Unified threat analysis completed successfully!");
+      await revealSections(finalResult);
     } catch (error) {
       console.error("Analysis processing error:", error);
       toast.error("Analysis failed. Please try again.");
@@ -743,189 +829,197 @@ ${JSON.stringify(result.abuseData, null, 2)}
       {analysisResult && (
         <>
           {/* 1. Threat Level Overview */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle
-                  className="text-sm"
-                  style={{ fontWeight: "var(--font-weight-semibold)" }}
-                >
-                  Threat Level
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className="px-3 py-2 rounded-lg text-center"
-                  style={{
-                    backgroundColor: threatLevel.bgColor,
-                    border: `2px solid ${threatLevel.color}`,
-                  }}
-                >
+          {visibleSections.overview && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 animate-fade-in-up">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle
+                    className="text-sm"
+                    style={{ fontWeight: "var(--font-weight-semibold)" }}
+                  >
+                    Threat Level
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div
-                    className="text-xl sm:text-2xl"
+                    className="px-3 py-2 rounded-lg text-center"
                     style={{
-                      color: threatLevel.color,
-                      fontWeight: "var(--font-weight-bold)",
+                      backgroundColor: threatLevel.bgColor,
+                      border: `2px solid ${threatLevel.color}`,
                     }}
                   >
-                    {threatLevel.level}
+                    <div
+                      className="text-xl sm:text-2xl"
+                      style={{
+                        color: threatLevel.color,
+                        fontWeight: "var(--font-weight-bold)",
+                      }}
+                    >
+                      {threatLevel.level}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* 2. Total Alerts */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle
-                  className="text-sm"
-                  style={{ fontWeight: "var(--font-weight-semibold)" }}
-                >
-                  Total Alerts
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className="text-2xl sm:text-3xl"
-                  style={{
-                    fontWeight: "var(--font-weight-bold)",
-                    color: "var(--foreground)",
-                  }}
-                >
-                  {totalVendors}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Security vendors
-                </p>
-              </CardContent>
-            </Card>
+              {/* 2. Total Alerts */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle
+                    className="text-sm"
+                    style={{ fontWeight: "var(--font-weight-semibold)" }}
+                  >
+                    Total Alerts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div
+                    className="text-2xl sm:text-3xl"
+                    style={{
+                      fontWeight: "var(--font-weight-bold)",
+                      color: "var(--foreground)",
+                    }}
+                  >
+                    {totalVendors}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Security vendors
+                  </p>
+                </CardContent>
+              </Card>
 
-            {/* 3. High Alerts */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle
-                  className="text-sm"
-                  style={{ fontWeight: "var(--font-weight-semibold)" }}
-                >
-                  High Alerts
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className="text-2xl sm:text-3xl"
-                  style={{
-                    fontWeight: "var(--font-weight-bold)",
-                    color: "var(--destructive)",
-                  }}
-                >
-                  {threatStats.malicious}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Malicious detections
-                </p>
-              </CardContent>
-            </Card>
+              {/* 3. High Alerts */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle
+                    className="text-sm"
+                    style={{ fontWeight: "var(--font-weight-semibold)" }}
+                  >
+                    High Alerts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div
+                    className="text-2xl sm:text-3xl"
+                    style={{
+                      fontWeight: "var(--font-weight-bold)",
+                      color: "var(--destructive)",
+                    }}
+                  >
+                    {threatStats.malicious}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Malicious detections
+                  </p>
+                </CardContent>
+              </Card>
 
-            {/* 4. Medium Alerts */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle
-                  className="text-sm"
-                  style={{ fontWeight: "var(--font-weight-semibold)" }}
-                >
-                  Medium Alerts
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className="text-2xl sm:text-3xl"
-                  style={{
-                    fontWeight: "var(--font-weight-bold)",
-                    color: "var(--warning)",
-                  }}
-                >
-                  {threatStats.suspicious}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Suspicious detections
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+              {/* 4. Medium Alerts */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle
+                    className="text-sm"
+                    style={{ fontWeight: "var(--font-weight-semibold)" }}
+                  >
+                    Medium Alerts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div
+                    className="text-2xl sm:text-3xl"
+                    style={{
+                      fontWeight: "var(--font-weight-bold)",
+                      color: "var(--warning)",
+                    }}
+                  >
+                    {threatStats.suspicious}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Suspicious detections
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* 5. Threat Distribution & 6. Detection Statistics */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base sm:text-lg">
-                  Threat Distribution
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">
-                  Analysis breakdown by category
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={threatLevelData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50} // 🔥 donut style
-                      outerRadius={80}
-                      paddingAngle={3}
-                      dataKey="value"
-                      label={({ name, percent }) =>
-                        percent > 0
-                          ? `${name} (${(percent * 100).toFixed(0)}%)`
-                          : ""
-                      }
-                      labelLine={false}
-                    >
-                      {threatLevelData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
+          {visibleSections.charts && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 animate-fade-in-up">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base sm:text-lg">
+                    Threat Distribution
+                  </CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">
+                    Analysis breakdown by category
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie
+                        data={threatLevelData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50} // 🔥 donut style
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                        label={({ name, percent }) =>
+                          percent > 0
+                            ? `${name} (${(percent * 100).toFixed(0)}%)`
+                            : ""
+                        }
+                        labelLine={false}
+                      >
+                        {threatLevelData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
 
-                    <Tooltip
-                      formatter={(value: number) => [`${value}`, "Detections"]}
-                    />
+                      <Tooltip
+                        formatter={(value: number) => [
+                          `${value}`,
+                          "Detections",
+                        ]}
+                      />
 
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                      iconType="circle"
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+                      <Legend
+                        verticalAlign="bottom"
+                        height={36}
+                        iconType="circle"
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base sm:text-lg">
-                  Detection Statistics
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">
-                  Vendor detection counts
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={threatLevelData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base sm:text-lg">
+                    Detection Statistics
+                  </CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">
+                    Vendor detection counts
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={threatLevelData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#3b82f6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* VirusTotal Intel Card — adaptif berdasarkan tipe input */}
-          {analysisResult.virusTotalIntel &&
+          {visibleSections.virustotal &&
+            analysisResult.virusTotalIntel &&
             (() => {
               const intel = analysisResult.virusTotalIntel;
               const isFile =
@@ -962,7 +1056,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
               const label = indicatorLabel[detectedType] ?? "Indicator";
 
               return (
-                <Card>
+                <Card className="animate-fade-in-up">
                   <CardHeader>
                     <div className="flex items-center gap-2">
                       <Shield
@@ -1420,74 +1514,76 @@ ${JSON.stringify(result.abuseData, null, 2)}
             })()}
 
           {/* 7. Security Vendor Analysis */}
-          <Card>
-            <CardHeader>
-              <CardTitle
-                className="text-base sm:text-lg"
-                style={{ fontWeight: 700 }}
-              >
-                Security Vendor Analysis
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">
-                Detection results from VirusTotal security vendors
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs font-semibold sm:text-sm">
-                        Vendor
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold sm:text-sm">
-                        Category
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold sm:text-sm">
-                        Result
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {getVendorResults().map((vendor: any, index: number) => (
-                      <TableRow key={index}>
-                        <TableCell className="text-xs sm:text-sm">
-                          {vendor.vendor}
-                        </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const categoryColors: Record<string, string> = {
-                              malicious: "#ef4444",
-                              suspicious: "#f59e0b",
-                              harmless: "#10b981",
-                              undetected: "#6b7280",
-                            };
-                            const color =
-                              categoryColors[vendor.category] ?? "#6b7280";
-                            return (
-                              <Badge
-                                className="text-xs text-white border-0"
-                                style={{ backgroundColor: color }}
-                              >
-                                {vendor.category}
-                              </Badge>
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {vendor.result}
-                        </TableCell>
+          {visibleSections.vendors && (
+            <Card className="animate-fade-in-up">
+              <CardHeader>
+                <CardTitle
+                  className="text-base sm:text-lg"
+                  style={{ fontWeight: 700 }}
+                >
+                  Security Vendor Analysis
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Detection results from VirusTotal security vendors
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs font-semibold sm:text-sm">
+                          Vendor
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold sm:text-sm">
+                          Category
+                        </TableHead>
+                        <TableHead className="text-xs font-semibold sm:text-sm">
+                          Result
+                        </TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {getVendorResults().map((vendor: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell className="text-xs sm:text-sm">
+                            {vendor.vendor}
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const categoryColors: Record<string, string> = {
+                                malicious: "#ef4444",
+                                suspicious: "#f59e0b",
+                                harmless: "#10b981",
+                                undetected: "#6b7280",
+                              };
+                              const color =
+                                categoryColors[vendor.category] ?? "#6b7280";
+                              return (
+                                <Badge
+                                  className="text-xs text-white border-0"
+                                  style={{ backgroundColor: color }}
+                                >
+                                  {vendor.category}
+                                </Badge>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-xs sm:text-sm">
+                            {vendor.result}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* AbuseIPDB Reputation Data (if applicable) */}
-          {getAbuseIPData() && (
-            <Card>
+          {visibleSections.abuse && getAbuseIPData() && (
+            <Card className="animate-fade-in-up">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Network
@@ -1663,8 +1759,8 @@ ${JSON.stringify(result.abuseData, null, 2)}
           {/* ===============================
    MISP THREAT INTELLIGENCE CARD
 ================================ */}
-          {getMISPData() && (
-            <Card>
+          {visibleSections.misp && getMISPData() && (
+            <Card className="animate-fade-in-up">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Shield className="h-5 w-5" style={{ color: "#2563eb" }} />
@@ -1919,261 +2015,268 @@ ${JSON.stringify(result.abuseData, null, 2)}
           )} */}
 
           {/* 9. Threat Correlation Engine */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <TrendingUp
-                  className="h-5 w-5 sm:h-6 sm:w-6"
-                  style={{ color: "var(--primary)" }}
-                />
-                <CardTitle className="text-base sm:text-lg">
-                  Threat Correlation Engine
-                </CardTitle>
-              </div>
-              <CardDescription className="text-xs sm:text-sm">
-                Multi-dimensional threat analysis across data sources
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <RadarChart data={getCorrelationData()}>
-                      <PolarGrid />
-                      <PolarAngleAxis
-                        dataKey="metric"
-                        tick={{ fontSize: 12 }}
-                      />
-                      <PolarRadiusAxis
-                        angle={90}
-                        domain={[0, 100]}
-                        tick={{ fontSize: 10 }}
-                      />
-                      <Radar
-                        name="Threat Score"
-                        dataKey="score"
-                        stroke="#0052FF"
-                        fill="#0052FF"
-                        fillOpacity={0.6}
-                      />
-                      <Tooltip />
-                    </RadarChart>
-                  </ResponsiveContainer>
+          {visibleSections.correlation && (
+            <Card className="animate-fade-in-up">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <TrendingUp
+                    className="h-5 w-5 sm:h-6 sm:w-6"
+                    style={{ color: "var(--primary)" }}
+                  />
+                  <CardTitle className="text-base sm:text-lg">
+                    Threat Correlation Engine
+                  </CardTitle>
                 </div>
-                <div className="space-y-3">
-                  <h4
-                    className="text-sm sm:text-base"
-                    style={{ fontWeight: "var(--font-weight-semibold)" }}
-                  >
-                    Correlation Insights
-                  </h4>
-                  <div className="space-y-2 text-xs sm:text-sm">
-                    <div className="p-3 rounded-lg bg-muted">
-                      <p className="whitespace-pre-wrap">
-                        {analysisResult.correlationInsights}
-                      </p>
+                <CardDescription className="text-xs sm:text-sm">
+                  Multi-dimensional threat analysis across data sources
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <RadarChart data={getCorrelationData()}>
+                        <PolarGrid />
+                        <PolarAngleAxis
+                          dataKey="metric"
+                          tick={{ fontSize: 12 }}
+                        />
+                        <PolarRadiusAxis
+                          angle={90}
+                          domain={[0, 100]}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <Radar
+                          name="Threat Score"
+                          dataKey="score"
+                          stroke="#0052FF"
+                          fill="#0052FF"
+                          fillOpacity={0.6}
+                        />
+                        <Tooltip />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-3">
+                    <h4
+                      className="text-sm sm:text-base"
+                      style={{ fontWeight: "var(--font-weight-semibold)" }}
+                    >
+                      Correlation Insights
+                    </h4>
+                    <div className="space-y-2 text-xs sm:text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <p className="whitespace-pre-wrap">
+                          {analysisResult.correlationInsights}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* 8. AI-Generated Analysis Report */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <span
-                  className="text-base sm:text-lg flex items-center gap-2"
-                  style={{ fontWeight: 700 }}
-                >
-                  <Activity className="h-5 w-5" />
-                  AI-Generated Analysis Report
-                </span>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => handleDownload("pdf")}
-                    className="text-xs sm:text-sm"
+          {visibleSections.ai && (
+            <Card className="animate-fade-in-up">
+              <CardHeader>
+                <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <span
+                    className="text-base sm:text-lg flex items-center gap-2"
+                    style={{ fontWeight: 700 }}
                   >
-                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                    Download PDF
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDownload("docx")}
-                    className="text-xs sm:text-sm"
-                  >
-                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                    Download DOCX
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDownload("json")}
-                    className="text-xs sm:text-sm"
-                  >
-                    <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                    Download STIX JSON
-                  </Button>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    table: ({ children }) => (
-                      <div className="overflow-x-auto my-4">
-                        <table className="w-full text-xs border border-gray-300 rounded-md">
+                    <Activity className="h-5 w-5" />
+                    AI-Generated Analysis Report
+                  </span>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleDownload("pdf")}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                      Download PDF
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownload("docx")}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                      Download DOCX
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownload("json")}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                      Download STIX JSON
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      table: ({ children }) => (
+                        <div className="overflow-x-auto my-4">
+                          <table className="w-full text-xs border border-gray-300 rounded-md">
+                            {children}
+                          </table>
+                        </div>
+                      ),
+                      thead: ({ children }) => (
+                        <thead className="bg-gray-100 text-gray-700">
                           {children}
-                        </table>
-                      </div>
-                    ),
-                    thead: ({ children }) => (
-                      <thead className="bg-gray-100 text-gray-700">
-                        {children}
-                      </thead>
-                    ),
-                    tbody: ({ children }) => (
-                      <tbody className="divide-y">{children}</tbody>
-                    ),
-                    tr: ({ children }) => (
-                      <tr className="hover:bg-gray-50">{children}</tr>
-                    ),
-                    th: ({ children }) => (
-                      <th className="px-3 py-2 text-left font-semibold border">
-                        {children}
-                      </th>
-                    ),
-                    td: ({ children }) => (
-                      <td className="px-3 py-2 border text-gray-700">
-                        {children}
-                      </td>
-                    ),
-                  }}
-                >
-                  {analysisResult.aiAnalysis}
-                </ReactMarkdown>{" "}
-              </div>
-            </CardContent>
-          </Card>
+                        </thead>
+                      ),
+                      tbody: ({ children }) => (
+                        <tbody className="divide-y">{children}</tbody>
+                      ),
+                      tr: ({ children }) => (
+                        <tr className="hover:bg-gray-50">{children}</tr>
+                      ),
+                      th: ({ children }) => (
+                        <th className="px-3 py-2 text-left font-semibold border">
+                          {children}
+                        </th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="px-3 py-2 border text-gray-700">
+                          {children}
+                        </td>
+                      ),
+                    }}
+                  >
+                    {typedAiAnalysis}
+                  </ReactMarkdown>{" "}
+                  {isTypingAi && <span className="ai-typing-cursor" />}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* 10. Recommended Mitigation Actions */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Shield
-                  className="h-5 w-5 sm:h-6 sm:w-6"
-                  style={{ color: "var(--success)" }}
-                />
-                <CardTitle className="text-base sm:text-lg">
-                  Recommended Mitigation Actions
-                </CardTitle>
-              </div>
-              <CardDescription className="text-xs sm:text-sm">
-                Step-by-step security response plan
-              </CardDescription>
-
-              {/* CVE list */}
-              {analysisResult.cveList?.length > 0 && (
-                <div className="mt-2 text-xs sm:text-sm">
-                  <strong>CVE:</strong>{" "}
-                  {analysisResult.cveList.map((cve: string, i: number) => (
-                    <span key={i} className="mr-2 text-blue-600">
-                      {cve}
-                    </span>
-                  ))}
+          {visibleSections.mitigation && (
+            <Card className="animate-fade-in-up">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Shield
+                    className="h-5 w-5 sm:h-6 sm:w-6"
+                    style={{ color: "var(--success)" }}
+                  />
+                  <CardTitle className="text-base sm:text-lg">
+                    Recommended Mitigation Actions
+                  </CardTitle>
                 </div>
-              )}
+                <CardDescription className="text-xs sm:text-sm">
+                  Step-by-step security response plan
+                </CardDescription>
 
-              {/* MITRE Techniques */}
-              {analysisResult.mitreTechniques && (
-                <div className="mt-2 space-y-1 text-xs sm:text-sm">
-                  <div>
-                    <strong>MITRE Techniques:</strong>{" "}
-                    {analysisResult.mitreTechniques?.join(", ")}
+                {/* CVE list */}
+                {analysisResult.cveList?.length > 0 && (
+                  <div className="mt-2 text-xs sm:text-sm">
+                    <strong>CVE:</strong>{" "}
+                    {analysisResult.cveList.map((cve: string, i: number) => (
+                      <span key={i} className="mr-2 text-blue-600">
+                        {cve}
+                      </span>
+                    ))}
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Reasoning box */}
-              {analysisResult.reasoning && (
-                <div className="mt-2 p-2 rounded bg-muted text-xs whitespace-pre-wrap">
-                  <strong>Reason:</strong>
-                  <br />
-                  {analysisResult.reasoning}
-                </div>
-              )}
-            </CardHeader>
+                {/* MITRE Techniques */}
+                {analysisResult.mitreTechniques && (
+                  <div className="mt-2 space-y-1 text-xs sm:text-sm">
+                    <div>
+                      <strong>MITRE Techniques:</strong>{" "}
+                      {analysisResult.mitreTechniques?.join(", ")}
+                    </div>
+                  </div>
+                )}
 
-            <CardContent>
-              {/*
+                {/* Reasoning box */}
+                {analysisResult.reasoning && (
+                  <div className="mt-2 p-2 rounded bg-muted text-xs whitespace-pre-wrap">
+                    <strong>Reason:</strong>
+                    <br />
+                    {analysisResult.reasoning}
+                  </div>
+                )}
+              </CardHeader>
+
+              <CardContent>
+                {/*
                 ✅ FIXED CONDITION:
                 Use Array.isArray guard so an empty array doesn't
                 accidentally fall through to the mock list.
               */}
-              {Array.isArray(analysisResult.mitreMitigations) &&
-              analysisResult.mitreMitigations.length > 0 ? (
-                <ul className="space-y-3">
-                  {analysisResult.mitreMitigations.map(
-                    (m: any, index: number) => (
-                      <li
-                        key={m.id ?? index}
-                        className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40"
-                      >
-                        {/* Step number badge */}
-                        <Badge className="mt-0.5 text-xs shrink-0">
-                          {index + 1}
-                        </Badge>
+                {Array.isArray(analysisResult.mitreMitigations) &&
+                analysisResult.mitreMitigations.length > 0 ? (
+                  <ul className="space-y-3">
+                    {analysisResult.mitreMitigations.map(
+                      (m: any, index: number) => (
+                        <li
+                          key={m.id ?? index}
+                          className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40"
+                        >
+                          {/* Step number badge */}
+                          <Badge className="mt-0.5 text-xs shrink-0">
+                            {index + 1}
+                          </Badge>
 
-                        <div className="space-y-1 min-w-0">
-                          {/* Mitigation name + MITRE/NIST ID */}
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs sm:text-sm font-semibold">
-                              {m.name}
-                            </span>
-                            {m.id && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs font-mono"
-                              >
-                                {m.id}
-                              </Badge>
+                          <div className="space-y-1 min-w-0">
+                            {/* Mitigation name + MITRE/NIST ID */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs sm:text-sm font-semibold">
+                                {m.name}
+                              </span>
+                              {m.id && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs font-mono"
+                                >
+                                  {m.id}
+                                </Badge>
+                              )}
+                            </div>
+
+                            {/* Description */}
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {m.description}
+                            </p>
+
+                            {/* Framework tag */}
+                            {m.framework && (
+                              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                                {m.framework}
+                              </span>
                             )}
                           </div>
-
-                          {/* Description */}
-                          <p className="text-xs text-muted-foreground leading-relaxed">
-                            {m.description}
-                          </p>
-
-                          {/* Framework tag */}
-                          {m.framework && (
-                            <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                              {m.framework}
-                            </span>
-                          )}
-                        </div>
-                      </li>
-                    ),
-                  )}
-                </ul>
-              ) : (
-                // ── Fallback: only shown when backend returns nothing ──
-                <div className="flex items-center gap-2 p-3 rounded-lg border border-yellow-200 bg-yellow-50 text-yellow-800 text-xs sm:text-sm">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>
-                    No specific mitigations returned from the analysis pipeline.
-                    Ensure the backend <code>mitreMitigations</code> field is
-                    populated and check the server console log.
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                ) : (
+                  // ── Fallback: only shown when backend returns nothing ──
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-yellow-200 bg-yellow-50 text-yellow-800 text-xs sm:text-sm">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>
+                      No specific mitigations returned from the analysis
+                      pipeline. Ensure the backend <code>mitreMitigations</code>{" "}
+                      field is populated and check the server console log.
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

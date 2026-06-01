@@ -61,7 +61,9 @@ export default function App() {
         setUserRole(null);
       }
 
-      setLoading(false);
+      setTimeout(() => {
+        setLoading(false);
+      }, 5000);
     };
 
     init();
@@ -161,8 +163,26 @@ export default function App() {
   =========================================== */
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-lg">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center justify-center gap-4">
+          <div className="cyber-loading-spinner" />
+
+          <div className="text-center">
+            <h1
+              className="text-xl"
+              style={{
+                fontWeight: "var(--font-weight-bold)",
+                color: "var(--foreground)",
+              }}
+            >
+              Cyber Fusion
+            </h1>
+
+            <p className="text-sm text-muted-foreground mt-1">
+              Loading<span className="loading-dots"></span>
+            </p>
+          </div>
+        </div>
       </div>
     );
   }

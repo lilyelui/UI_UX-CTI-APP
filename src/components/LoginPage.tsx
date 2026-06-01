@@ -119,7 +119,7 @@ export function LoginPage({
               letterSpacing: "-0.015em",
             }}
           >
-            Cyber Threat Intelligence
+            Cyber Fusion
           </CardTitle>
           <CardDescription
             className="text-center"
