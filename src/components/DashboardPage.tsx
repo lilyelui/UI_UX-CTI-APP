@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { Button } from "./ui/button";
@@ -96,7 +96,9 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
     ai: false,
     mitigation: false,
   });
-
+  const chartsSectionRef = useRef<HTMLDivElement | null>(null);
+  const [chartAnimationKey, setChartAnimationKey] = useState(0);
+  const STORAGE_KEY = "threat-analysis-last-result";
   const [typedAiAnalysis, setTypedAiAnalysis] = useState("");
   const [isTypingAi, setIsTypingAi] = useState(false);
   const delay = (ms: number) => {
@@ -217,8 +219,10 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
 
   const handleUnifiedAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
+
     setLoading(true);
     setAnalysisResult(null);
+    localStorage.removeItem(STORAGE_KEY);
     resetProgressiveView();
 
     const type = detectInputType(analysisValue);
@@ -395,9 +399,10 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
 
       // ✅ 6. SET FINAL RESULT
       setAnalysisResult(finalResult);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(finalResult));
 
       setAnalysisValue("");
-      setDetectedType("");
+      setDetectedType(type);
 
       toast.success("Unified threat analysis completed successfully!");
       await revealSections(finalResult);
@@ -733,6 +738,58 @@ ${JSON.stringify(result.abuseData, null, 2)}
   console.log("MISP FULL:", getMISPData());
   console.log("MISP TAGS:", getMISPData()?.tags);
 
+  useEffect(() => {
+    const savedResult = localStorage.getItem(STORAGE_KEY);
+
+    if (!savedResult) return;
+
+    try {
+      const parsedResult = JSON.parse(savedResult);
+
+      setAnalysisResult(parsedResult);
+      setDetectedType(parsedResult?.type || "");
+
+      setVisibleSections({
+        overview: true,
+        charts: true,
+        virustotal: !!parsedResult?.virusTotalIntel,
+        vendors: !!parsedResult?.vendors,
+        abuse: !!(parsedResult?.abuseData || parsedResult?.abuseipdb),
+        misp: !!parsedResult?.mispData,
+        correlation: !!parsedResult?.correlationInsights,
+        ai: !!parsedResult?.aiAnalysis,
+        mitigation:
+          Array.isArray(parsedResult?.mitreMitigations) &&
+          parsedResult.mitreMitigations.length > 0,
+      });
+
+      setTypedAiAnalysis(parsedResult?.aiAnalysis || "");
+      setIsTypingAi(false);
+    } catch (error) {
+      console.error("Failed to restore analysis result:", error);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!visibleSections.charts || !chartsSectionRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setChartAnimationKey((prev) => prev + 1);
+        }
+      },
+      {
+        threshold: 0.45,
+      },
+    );
+
+    observer.observe(chartsSectionRef.current);
+
+    return () => observer.disconnect();
+  }, [visibleSections.charts]);
+
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       <div>
@@ -943,7 +1000,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
           {/* 5. Threat Distribution & 6. Detection Statistics */}
           {visibleSections.charts && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 animate-fade-in-up">
+            <div
+              ref={chartsSectionRef}
+              className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 animate-fade-in-up"
+            >
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base sm:text-lg">
@@ -955,15 +1015,21 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
+                    <PieChart key={`pie-${chartAnimationKey}`}>
                       <Pie
                         data={threatLevelData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={50} // 🔥 donut style
+                        innerRadius={50}
                         outerRadius={80}
                         paddingAngle={3}
                         dataKey="value"
+                        startAngle={90}
+                        endAngle={-270}
+                        isAnimationActive={true}
+                        animationBegin={0}
+                        animationDuration={1200}
+                        animationEasing="ease-out"
                         label={({ name, percent }) =>
                           percent > 0
                             ? `${name} (${(percent * 100).toFixed(0)}%)`
@@ -1004,12 +1070,22 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={threatLevelData}>
+                    <BarChart
+                      key={`bar-${chartAnimationKey}`}
+                      data={threatLevelData}
+                    >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} />
                       <Tooltip />
-                      <Bar dataKey="value" fill="#3b82f6" />
+                      <Bar
+                        dataKey="value"
+                        fill="#3b82f6"
+                        isAnimationActive={true}
+                        animationBegin={0}
+                        animationDuration={1000}
+                        animationEasing="ease-out"
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

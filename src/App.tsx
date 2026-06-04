@@ -63,7 +63,7 @@ export default function App() {
 
       setTimeout(() => {
         setLoading(false);
-      }, 5000);
+      }, 500);
     };
 
     init();
@@ -150,12 +150,15 @@ export default function App() {
      LOGOUT
   =========================================== */
   const handleLogout = async () => {
+    localStorage.removeItem("threat-analysis-last-result");
+
+    await supabase.auth.signOut();
+
     setUserRole(null);
     setUser(null);
     setAccessToken("");
     setIsAuthenticated(false);
 
-    await supabase.auth.signOut();
     navigate("/login");
   };
   /* ===========================================
@@ -207,7 +210,13 @@ export default function App() {
         )}
 
         {/* CONTENT */}
-        <div className={showSidebar ? "md:ml-64" : ""}>
+        <div
+          className={
+            showSidebar && sidebarOpen
+              ? "md:ml-64 transition-all duration-300"
+              : "md:ml-0 transition-all duration-300"
+          }
+        >
           {/* Header */}
           {showSidebar && (
             <header className="sticky top-0 z-30 bg-background border-b">

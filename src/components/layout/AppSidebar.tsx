@@ -9,6 +9,8 @@ import {
   History,
   Settings,
   Users,
+  Menu,
+  X,
 } from "lucide-react";
 type Props = {
   sidebarOpen: boolean;
@@ -76,12 +78,23 @@ export function AppSidebar({
           onClick={() => setSidebarOpen(false)}
         />
       )}
+      {/* Hamburger Button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="fixed top-4 left-4 z-50 p-2 rounded-lg shadow-md transition-all"
+        style={{
+          backgroundColor: "var(--sidebar-primary)",
+          color: "var(--sidebar-primary-foreground)",
+        }}
+      >
+        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen transition-transform md:translate-x-0",
-          sidebarOpen ? "translate-x-0 w-64" : "-translate-x-full w-64",
+          "fixed left-0 top-0 z-40 h-screen w-64 transition-transform duration-300",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
         style={{
           backgroundColor: "var(--sidebar)",
@@ -90,7 +103,7 @@ export function AppSidebar({
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div
-            className="flex items-center gap-3 p-4 sm:p-6"
+            className="flex items-center gap-3 p-4 sm:p-6 pt-16"
             style={{
               borderBottom: "1px solid var(--sidebar-border)",
             }}
