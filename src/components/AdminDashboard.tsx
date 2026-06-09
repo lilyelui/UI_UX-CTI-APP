@@ -163,7 +163,9 @@ export function AdminDashboard({
   };
 
   const deleteUser = async (userId: string) => {
-    const confirmed = window.confirm("Are you sure you want to delete this user?");
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this user?",
+    );
 
     if (!confirmed) return;
 
@@ -390,7 +392,7 @@ export function AdminDashboard({
                         <th className="p-3">User Email</th>
                         <th className="p-3">Action</th>
                         <th className="p-3">Module</th>
-                        <th className="p-3">IP Address</th>
+                        {/* <th className="p-3">IP Address</th> */}
                         <th className="p-3">Details</th>
                       </tr>
                     </thead>
@@ -406,7 +408,7 @@ export function AdminDashboard({
                           <td className="p-3">{log.user_email || "-"}</td>
                           <td className="p-3 font-medium">{log.action}</td>
                           <td className="p-3">{log.module}</td>
-                          <td className="p-3">{log.ip_address || "-"}</td>
+                          {/* <td className="p-3">{log.ip_address || "-"}</td> */}
                           <td className="p-3">
                             <pre className="max-w-md overflow-x-auto rounded-md bg-muted p-2 text-xs">
                               {JSON.stringify(log.details, null, 2)}

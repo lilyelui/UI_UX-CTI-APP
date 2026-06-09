@@ -166,10 +166,13 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
       await delay(350);
     }
 
+    // Recommended Mitigation Actions muncul setelah Threat Correlation Engine
+    setVisibleSections((prev) => ({ ...prev, mitigation: true }));
+    await delay(350);
+
+    // AI Generated Report muncul paling akhir
     setVisibleSections((prev) => ({ ...prev, ai: true }));
     await typeAiReport(result?.aiAnalysis || "");
-
-    setVisibleSections((prev) => ({ ...prev, mitigation: true }));
   };
   // Auto-detect input type
   const detectInputType = (value: string): string => {
@@ -533,11 +536,11 @@ Generated: ${new Date().toLocaleString()}
 THREAT CORRELATION ANALYSIS
 ${result.correlationInsights}
 
-AI-GENERATED ANALYSIS
-${result.aiAnalysis}
-
 RECOMMENDED MITIGATION ACTIONS
 ${result.mitigationActions?.join("\n") || "See detailed recommendations below"}
+
+AI-GENERATED ANALYSIS
+${result.aiAnalysis}
 
 ---
 RAW DATA
@@ -2153,91 +2156,6 @@ ${JSON.stringify(result.abuseData, null, 2)}
             </Card>
           )}
 
-          {/* 8. AI-Generated Analysis Report */}
-          {visibleSections.ai && (
-            <Card className="animate-fade-in-up">
-              <CardHeader>
-                <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <span
-                    className="text-base sm:text-lg flex items-center gap-2"
-                    style={{ fontWeight: 700 }}
-                  >
-                    <Activity className="h-5 w-5" />
-                    AI-Generated Analysis Report
-                  </span>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleDownload("pdf")}
-                      className="text-xs sm:text-sm"
-                    >
-                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                      Download PDF
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDownload("docx")}
-                      className="text-xs sm:text-sm"
-                    >
-                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                      Download DOCX
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDownload("json")}
-                      className="text-xs sm:text-sm"
-                    >
-                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                      Download STIX JSON
-                    </Button>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      table: ({ children }) => (
-                        <div className="overflow-x-auto my-4">
-                          <table className="w-full text-xs border border-gray-300 rounded-md">
-                            {children}
-                          </table>
-                        </div>
-                      ),
-                      thead: ({ children }) => (
-                        <thead className="bg-gray-100 text-gray-700">
-                          {children}
-                        </thead>
-                      ),
-                      tbody: ({ children }) => (
-                        <tbody className="divide-y">{children}</tbody>
-                      ),
-                      tr: ({ children }) => (
-                        <tr className="hover:bg-gray-50">{children}</tr>
-                      ),
-                      th: ({ children }) => (
-                        <th className="px-3 py-2 text-left font-semibold border">
-                          {children}
-                        </th>
-                      ),
-                      td: ({ children }) => (
-                        <td className="px-3 py-2 border text-gray-700">
-                          {children}
-                        </td>
-                      ),
-                    }}
-                  >
-                    {typedAiAnalysis}
-                  </ReactMarkdown>{" "}
-                  {isTypingAi && <span className="ai-typing-cursor" />}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* 10. Recommended Mitigation Actions */}
           {visibleSections.mitigation && (
             <Card className="animate-fade-in-up">
@@ -2350,6 +2268,91 @@ ${JSON.stringify(result.abuseData, null, 2)}
                     </span>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 8. AI-Generated Analysis Report */}
+          {visibleSections.ai && (
+            <Card className="animate-fade-in-up">
+              <CardHeader>
+                <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <span
+                    className="text-base sm:text-lg flex items-center gap-2"
+                    style={{ fontWeight: 700 }}
+                  >
+                    <Activity className="h-5 w-5" />
+                    AI-Generated Analysis Report
+                  </span>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleDownload("pdf")}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                      Download PDF
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownload("docx")}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                      Download DOCX
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownload("json")}
+                      className="text-xs sm:text-sm"
+                    >
+                      <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                      Download STIX JSON
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      table: ({ children }) => (
+                        <div className="overflow-x-auto my-4">
+                          <table className="w-full text-xs border border-gray-300 rounded-md">
+                            {children}
+                          </table>
+                        </div>
+                      ),
+                      thead: ({ children }) => (
+                        <thead className="bg-gray-100 text-gray-700">
+                          {children}
+                        </thead>
+                      ),
+                      tbody: ({ children }) => (
+                        <tbody className="divide-y">{children}</tbody>
+                      ),
+                      tr: ({ children }) => (
+                        <tr className="hover:bg-gray-50">{children}</tr>
+                      ),
+                      th: ({ children }) => (
+                        <th className="px-3 py-2 text-left font-semibold border">
+                          {children}
+                        </th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="px-3 py-2 border text-gray-700">
+                          {children}
+                        </td>
+                      ),
+                    }}
+                  >
+                    {typedAiAnalysis}
+                  </ReactMarkdown>{" "}
+                  {isTypingAi && <span className="ai-typing-cursor" />}
+                </div>
               </CardContent>
             </Card>
           )}
