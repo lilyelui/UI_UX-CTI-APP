@@ -76,21 +76,24 @@ export function SignupPage({
 
   const handleGoogleSignup = async () => {
     try {
-      // Note: To enable Google login, you need to configure it in Supabase Dashboard
-      // Follow instructions at: https://supabase.com/docs/guides/auth/social-login/auth-google
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      setLoading(true);
+
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/google-signup-callback`,
+        },
       });
 
       if (error) {
         console.error("Google signup error:", error);
-        toast.error(
-          "Google signup not configured. Please use email signup or contact administrator.",
-        );
+        toast.error(`Google signup failed: ${error.message}`);
       }
     } catch (error) {
       console.error("Google signup processing error:", error);
       toast.error("Google signup failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 

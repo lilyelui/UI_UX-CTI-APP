@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { getSupabaseClient } from "../utils/supabase/client";
-import { projectId } from "../utils/supabase/info";
 import {
   Card,
   CardContent,
@@ -17,14 +16,17 @@ import { toast } from "sonner";
 
 interface SettingsPageProps {
   accessToken: string;
+  apiBaseUrl: string;
   user: any;
   onLogout: () => void;
+  onUserUpdate: (updatedUser: any) => void;
 }
-
 export function SettingsPage({
   accessToken,
+  apiBaseUrl,
   user,
   onLogout,
+  onUserUpdate,
 }: SettingsPageProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -39,39 +41,58 @@ export function SettingsPage({
     }
   }, [user]);
 
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+ const handleUpdateProfile = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/profile`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ name }),
-        },
-      );
+  const cleanName = name.trim();
 
-      const data = await response.json();
+  if (!cleanName) {
+    toast.error("Full name cannot be empty");
+    return;
+  }
 
-      if (!response.ok) {
-        console.error("Profile update error:", data);
-        toast.error(`Update failed: ${data.error || "Unknown error"}`);
-        return;
-      }
+  setLoading(true);
 
-      toast.success("Profile updated successfully!");
-    } catch (error) {
-      console.error("Profile update processing error:", error);
-      toast.error("Profile update failed. Please try again.");
-    } finally {
-      setLoading(false);
+  try {
+    const response = await fetch(`${apiBaseUrl}/profile`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ name: cleanName }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Profile update error:", data);
+      toast.error(`Update failed: ${data.error || "Unknown error"}`);
+      return;
     }
-  };
+
+    const updatedUser =
+      data.user || {
+        ...user,
+        user_metadata: {
+          ...user?.user_metadata,
+          name: cleanName,
+          full_name: cleanName,
+        },
+      };
+
+    onUserUpdate(updatedUser);
+
+    setName(cleanName);
+
+    toast.success("Profile updated successfully!");
+  } catch (error) {
+    console.error("Profile update processing error:", error);
+    toast.error("Profile update failed. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleLogout = async () => {
     try {
