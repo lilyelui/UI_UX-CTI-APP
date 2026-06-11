@@ -33,11 +33,51 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-
   const [accessToken, setAccessToken] = useState("");
 
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Tambahan: simpan data profile dari tabel profiles
+  const [profile, setProfile] = useState<any>(null);
+
+  const apiBaseUrl = "http://localhost:5000";
+
+  /* ===========================================
+     FETCH USER PROFILE
+  =========================================== */
+  const fetchUserProfile = async (authUser: any) => {
+    try {
+      if (!authUser?.id) {
+        setUserRole("user");
+        setProfile(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, name, role")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      console.log("AUTH USER:", authUser);
+      console.log("PROFILE DATA:", data);
+
+      if (error) {
+        console.error("Failed to fetch user profile:", error);
+        setUserRole("user");
+        setProfile(null);
+        return;
+      }
+
+      setProfile(data);
+      setUserRole(data?.role ?? "user");
+    } catch (error) {
+      console.error("Unexpected profile fetch error:", error);
+      setUserRole("user");
+      setProfile(null);
+    }
+  };
 
   /* ===========================================
      CHECK SESSION
@@ -53,12 +93,13 @@ export default function App() {
         setAccessToken(session.access_token);
         setUser(session.user);
 
-        await fetchUserRole(session.user);
+        await fetchUserProfile(session.user);
       } else {
         setIsAuthenticated(false);
         setAccessToken("");
         setUser(null);
         setUserRole(null);
+        setProfile(null);
       }
 
       setTimeout(() => {
@@ -76,46 +117,19 @@ export default function App() {
         setAccessToken(session.access_token);
         setUser(session.user);
 
-        fetchUserRole(session.user);
+        fetchUserProfile(session.user);
       } else {
         setIsAuthenticated(false);
         setAccessToken("");
         setUser(null);
         setUserRole(null);
+        setProfile(null);
         navigate("/login");
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
-  const fetchUserRole = async (authUser: any) => {
-    try {
-      if (!authUser?.id) {
-        setUserRole("user");
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, email, role")
-        .eq("id", authUser.id)
-        .maybeSingle();
-
-      console.log("AUTH USER:", authUser);
-      console.log("PROFILE ROLE DATA:", data);
-
-      if (error) {
-        console.error("Failed to fetch user role:", error);
-        setUserRole("user");
-        return;
-      }
-
-      setUserRole(data?.role ?? "user");
-    } catch (error) {
-      console.error("Unexpected role fetch error:", error);
-      setUserRole("user");
-    }
-  };
 
   /* ===========================================
      MOBILE SIDEBAR
@@ -134,7 +148,7 @@ export default function App() {
     setAccessToken(token);
     setUser(userData);
 
-    await fetchUserRole(userData);
+    await fetchUserProfile(userData);
 
     navigate("/dashboard");
   };
@@ -147,6 +161,30 @@ export default function App() {
   };
 
   /* ===========================================
+     USER UPDATE FROM SETTINGS
+  =========================================== */
+  const handleUserUpdate = async (updatedUser: any) => {
+    setUser(updatedUser);
+
+    const updatedName =
+      updatedUser?.user_metadata?.full_name ||
+      updatedUser?.user_metadata?.name ||
+      updatedUser?.user_metadata?.preferred_username ||
+      "";
+
+    setProfile((prev: any) => ({
+      ...prev,
+      id: prev?.id || updatedUser?.id,
+      email: prev?.email || updatedUser?.email,
+      role: prev?.role || userRole || "user",
+      name: updatedName || prev?.name,
+    }));
+
+    // Ambil ulang dari database agar nama benar-benar sesuai tabel profiles
+    await fetchUserProfile(updatedUser);
+  };
+
+  /* ===========================================
      LOGOUT
   =========================================== */
   const handleLogout = async () => {
@@ -155,12 +193,14 @@ export default function App() {
     await supabase.auth.signOut();
 
     setUserRole(null);
+    setProfile(null);
     setUser(null);
     setAccessToken("");
     setIsAuthenticated(false);
 
     navigate("/login");
   };
+
   /* ===========================================
      LOADING
   =========================================== */
@@ -194,7 +234,7 @@ export default function App() {
     isAuthenticated &&
     location.pathname !== "/login" &&
     location.pathname !== "/signup";
-  const apiBaseUrl = "http://localhost:5000";
+
   return (
     <>
       <div className="min-h-screen bg-background">
@@ -205,6 +245,7 @@ export default function App() {
             setSidebarOpen={setSidebarOpen}
             user={user}
             userRole={userRole}
+            profileName={profile?.name}
             onLogout={handleLogout}
           />
         )}
@@ -225,7 +266,7 @@ export default function App() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="md:hidden" // Only show on mobile
+                  className="md:hidden"
                 >
                   {sidebarOpen ? (
                     <X className="h-5 w-5" />
@@ -233,7 +274,7 @@ export default function App() {
                     <Menu className="h-5 w-5" />
                   )}
                 </Button>
-                {/* Desktop toggle */}
+
                 <Button
                   variant="ghost"
                   size="icon"
@@ -246,6 +287,7 @@ export default function App() {
                     <Menu className="h-5 w-5" />
                   )}
                 </Button>
+
                 <div className="flex items-center gap-2 sm:gap-4">
                   <div
                     className="text-xs sm:text-sm text-muted-foreground hidden sm:block"
@@ -258,6 +300,7 @@ export default function App() {
                       day: "numeric",
                     })}
                   </div>
+
                   <div
                     className="text-xs text-muted-foreground sm:hidden"
                     style={{ fontWeight: "var(--font-weight-medium)" }}
@@ -272,6 +315,7 @@ export default function App() {
               </div>
             </header>
           )}
+
           {/* PAGE */}
           <main className={showSidebar ? "p-4 md:p-6" : ""}>
             <Routes>
@@ -303,6 +347,7 @@ export default function App() {
                   )
                 }
               />
+
               <Route
                 path="/google-signup-callback"
                 element={<GoogleSignupCallback />}
@@ -332,6 +377,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+
               <Route
                 path="/admin"
                 element={
@@ -357,7 +403,7 @@ export default function App() {
                       apiBaseUrl={apiBaseUrl}
                       user={user}
                       onLogout={handleLogout}
-                      onUserUpdate={setUser}
+                      onUserUpdate={handleUserUpdate}
                     />
                   </ProtectedRoute>
                 }

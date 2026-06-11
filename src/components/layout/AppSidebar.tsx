@@ -1,6 +1,5 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Button } from "../ui/button";
 import { cn } from "../ui/utils";
 
 import {
@@ -12,11 +11,13 @@ import {
   Menu,
   X,
 } from "lucide-react";
+
 type Props = {
   sidebarOpen: boolean;
   userRole?: string | null;
   setSidebarOpen: (value: boolean) => void;
   user: any;
+  profileName?: string | null;
   onLogout: () => void;
 };
 
@@ -25,14 +26,24 @@ export function AppSidebar({
   setSidebarOpen,
   user,
   userRole,
+  profileName,
   onLogout,
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  /**
+   * Prioritas nama:
+   * 1. profileName dari database/profile
+   * 2. user_metadata yang sudah diperbarui
+   * 3. nama dari Google
+   * 4. email
+   */
   const displayName =
-    user?.user_metadata?.name ||
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.preferred_username ||
+    profileName?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    user?.user_metadata?.name?.trim() ||
+    user?.user_metadata?.preferred_username?.trim() ||
     user?.email?.split("@")[0] ||
     "User";
 
@@ -69,6 +80,7 @@ export function AppSidebar({
       path: "/settings",
     },
   ];
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -78,6 +90,7 @@ export function AppSidebar({
           onClick={() => setSidebarOpen(false)}
         />
       )}
+
       {/* Hamburger Button */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -150,7 +163,6 @@ export function AppSidebar({
           <nav className="flex-1 p-3 sm:p-4 space-y-2">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-
               const isActive = location.pathname === item.path;
 
               return (
@@ -170,11 +182,9 @@ export function AppSidebar({
                     backgroundColor: isActive
                       ? "var(--sidebar-primary)"
                       : "transparent",
-
                     color: isActive
                       ? "var(--sidebar-primary-foreground)"
                       : "var(--sidebar-foreground)",
-
                     fontWeight: isActive
                       ? "var(--font-weight-semibold)"
                       : "var(--font-weight-medium)",

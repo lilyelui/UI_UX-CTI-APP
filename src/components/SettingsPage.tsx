@@ -21,6 +21,7 @@ interface SettingsPageProps {
   onLogout: () => void;
   onUserUpdate: (updatedUser: any) => void;
 }
+
 export function SettingsPage({
   accessToken,
   apiBaseUrl,
@@ -40,8 +41,10 @@ export function SettingsPage({
         user.user_metadata?.name ||
           user.user_metadata?.full_name ||
           user.user_metadata?.preferred_username ||
+          user.email?.split("@")[0] ||
           "",
       );
+
       setEmail(user.email || "");
     }
   }, [user]);
@@ -59,13 +62,18 @@ export function SettingsPage({
     setLoading(true);
 
     try {
+      /**
+       * 1. Update nama ke backend/database profiles
+       */
       const response = await fetch(`${apiBaseUrl}/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ name: cleanName }),
+        body: JSON.stringify({
+          name: cleanName,
+        }),
       });
 
       const data = await response.json();
@@ -75,29 +83,61 @@ export function SettingsPage({
         toast.error(`Update failed: ${data.error || "Unknown error"}`);
         return;
       }
-      const { data: localUserData, error: localUpdateError } =
+
+      /**
+       * 2. Update juga metadata Supabase Auth
+       * Ini penting agar user_metadata ikut berubah.
+       */
+      const { data: updatedAuthData, error: updateAuthError } =
         await supabase.auth.updateUser({
           data: {
             ...user?.user_metadata,
             name: cleanName,
             full_name: cleanName,
+            preferred_username: cleanName,
           },
         });
 
-      if (localUpdateError) {
-        console.warn("Local Supabase user update warning:", localUpdateError);
+      if (updateAuthError) {
+        console.warn("Supabase auth metadata update warning:", updateAuthError);
       }
 
-      const updatedUser = localUserData.user || {
-        ...user,
+      /**
+       * 3. Ambil ulang user terbaru dari Supabase
+       * Supaya state user benar-benar fresh.
+       */
+      const { data: refreshedUserData, error: refreshError } =
+        await supabase.auth.getUser();
+
+      if (refreshError) {
+        console.warn("Refresh user warning:", refreshError);
+      }
+
+      /**
+       * 4. Bentuk user terbaru secara manual sebagai fallback.
+       * Ini memastikan sidebar langsung berubah tanpa harus logout/login ulang.
+       */
+      const updatedUser = refreshedUserData?.user ||
+        updatedAuthData?.user || {
+          ...user,
+          user_metadata: {
+            ...user?.user_metadata,
+            name: cleanName,
+            full_name: cleanName,
+            preferred_username: cleanName,
+          },
+        };
+
+      onUserUpdate({
+        ...updatedUser,
         user_metadata: {
-          ...user?.user_metadata,
+          ...updatedUser.user_metadata,
           name: cleanName,
           full_name: cleanName,
+          preferred_username: cleanName,
         },
-      };
+      });
 
-      onUserUpdate(updatedUser);
       setName(cleanName);
 
       toast.success("Profile updated successfully!");
@@ -138,7 +178,6 @@ export function SettingsPage({
         </p>
       </div>
 
-      {/* Profile Settings */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -147,6 +186,7 @@ export function SettingsPage({
           </CardTitle>
           <CardDescription>Update your personal information</CardDescription>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleUpdateProfile} className="space-y-4">
             <div className="space-y-2">
@@ -159,6 +199,7 @@ export function SettingsPage({
                 placeholder="Enter your name"
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -172,6 +213,7 @@ export function SettingsPage({
                 Email address cannot be changed
               </p>
             </div>
+
             <Button type="submit" disabled={loading}>
               <Save className="mr-2 h-4 w-4" />
               {loading ? "Saving..." : "Save Changes"}
@@ -180,51 +222,9 @@ export function SettingsPage({
         </CardContent>
       </Card>
 
-      {/* API Configuration Info
-      <Card>
-        <CardHeader>
-          <CardTitle>API Configuration</CardTitle>
-          <CardDescription>
-            API keys are configured server-side for security
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
-              <div>
-                <p className="font-medium">VirusTotal API</p>
-                <p className="text-sm text-muted-foreground">File and URL threat analysis</p>
-              </div>
-              <div className="text-sm text-green-600">Configured</div>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
-              <div>
-                <p className="font-medium">AbuseIPDB API</p>
-                <p className="text-sm text-muted-foreground">IP reputation checking</p>
-              </div>
-              <div className="text-sm text-green-600">Configured</div>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
-              <div>
-                <p className="font-medium">Qwen AI API</p>
-                <p className="text-sm text-muted-foreground">AI-powered analysis reports</p>
-              </div>
-              <div className="text-sm text-green-600">Configured</div>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Contact your administrator to update API keys
-          </p>
-        </CardContent>
-      </Card> */}
-
       <Separator />
 
-      {/* Account Actions */}
       <Card>
-        {/* <CardHeader>
-          <CardTitle>Account Actions</CardTitle>
-        </CardHeader> */}
         <CardContent className="mt-4">
           <Button variant="destructive" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
