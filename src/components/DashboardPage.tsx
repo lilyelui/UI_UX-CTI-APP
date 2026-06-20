@@ -1101,19 +1101,54 @@ ${JSON.stringify(result.abuseData, null, 2)}
             analysisResult.virusTotalIntel &&
             (() => {
               const intel = analysisResult.virusTotalIntel;
+
+              const displayIndicator =
+                intel.indicator ||
+                intel.hash ||
+                intel.sha256 ||
+                intel.sha1 ||
+                intel.md5 ||
+                analysisResult?.indicator ||
+                analysisResult?.ioc ||
+                "-";
+
+              const getDisplayIocType = (ioc: string, fallbackType: string) => {
+                const value = String(ioc || "").trim();
+
+                if (/^[a-fA-F0-9]{32}$/.test(value)) return "hash-md5";
+                if (/^[a-fA-F0-9]{40}$/.test(value)) return "hash-sha1";
+                if (/^[a-fA-F0-9]{64}$/.test(value)) return "hash-sha256";
+                if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(value)) return "ip";
+                if (/^https?:\/\//i.test(value)) return "url";
+                if (/^AS\d+$/i.test(value)) return "asn";
+                if (
+                  /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/.test(
+                    value,
+                  )
+                )
+                  return "domain";
+
+                return fallbackType || "unknown";
+              };
+
+              const displayType = getDisplayIocType(
+                displayIndicator,
+                detectedType,
+              );
+
               const isFile =
                 ["hash-md5", "hash-sha1", "hash-sha256"].includes(
-                  detectedType,
+                  displayType,
                 ) ||
-                // fallback: jika ada file_size atau meaningful_name berarti file
-                intel.meaningful_name ||
-                intel.file_size;
+                Boolean(intel.meaningful_name) ||
+                Boolean(intel.file_size);
 
-              const currentType = detectedType;
-              const isIP = currentType === "ip";
+              const isIP = displayType === "ip";
+
               const hasCrowdsource =
                 Array.isArray(intel.crowdsourced_context) &&
                 intel.crowdsourced_context.length > 0;
+
               const generalCVEs =
                 intel.cve_extracted?.filter(
                   (c: string) => !intel.yara_cves?.includes(c),
@@ -1121,7 +1156,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
 
               const showCveDetected =
                 generalCVEs.length > 0 && !(isIP && hasCrowdsource);
-              // label judul indikator sesuai tipe
+
               const indicatorLabel: Record<string, string> = {
                 ip: "IP Address",
                 domain: "Domain",
@@ -1131,8 +1166,10 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 "hash-sha256": "Hash (SHA256)",
                 subnet: "Subnet",
                 asn: "ASN",
+                unknown: "Indicator",
               };
-              const label = indicatorLabel[detectedType] ?? "Indicator";
+
+              const label = indicatorLabel[displayType] ?? "Indicator";
 
               return (
                 <Card className="animate-fade-in-up">
@@ -1163,7 +1200,7 @@ ${JSON.stringify(result.abuseData, null, 2)}
                             overflowWrap: "anywhere",
                           }}
                         >
-                          {intel.indicator ?? intel.hash ?? "-"}
+                          {displayIndicator}
                         </p>
                       </div>
                     </div>
@@ -1262,23 +1299,21 @@ ${JSON.stringify(result.abuseData, null, 2)}
                             CVEs Detected
                           </p>
                           <div className="flex flex-wrap gap-1">
-                            {intel.cve_extracted.map(
-                              (cve: string, i: number) => {
-                                const nvdUrl =
-                                  "https://nvd.nist.gov/vuln/detail/" + cve;
-                                return (
-                                  <a
-                                    key={i}
-                                    href={nvdUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-2 py-0.5 text-xs rounded-md bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
-                                  >
-                                    {cve}
-                                  </a>
-                                );
-                              },
-                            )}
+                            {generalCVEs.map((cve: string, i: number) => {
+                              const nvdUrl =
+                                "https://nvd.nist.gov/vuln/detail/" + cve;
+                              return (
+                                <a
+                                  key={i}
+                                  href={nvdUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-0.5 text-xs rounded-md bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
+                                >
+                                  {cve}
+                                </a>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
