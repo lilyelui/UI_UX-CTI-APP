@@ -254,18 +254,20 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
             indicator: analysisValue,
             type,
-            username, // ← TAMBAH
-            email, // ← TAMBAH
+            username,
+            email,
           }),
         }),
         fetch("http://localhost:5000/api/analyze", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
             indicator: analysisValue,
@@ -340,6 +342,7 @@ export function DashboardPage({ accessToken, apiBaseUrl }: DashboardPageProps) {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
               ip: analysisValue,
