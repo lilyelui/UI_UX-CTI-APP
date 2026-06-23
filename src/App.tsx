@@ -261,11 +261,17 @@ export default function App() {
           {showSidebar && (
             <header className="sticky top-0 z-30 bg-background border-b">
               <div className="flex items-center justify-between p-3 sm:p-4">
+                {/* Tombol Sidebar */}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="md:hidden"
+                  className="
+                  hover:bg-transparent
+                  active:bg-transparent
+                  focus:bg-transparent
+                  focus-visible:ring-0
+                "
                 >
                   {sidebarOpen ? (
                     <X className="h-5 w-5" />
@@ -274,6 +280,7 @@ export default function App() {
                   )}
                 </Button>
 
+                {/* Tanggal */}
                 <div className="flex items-center gap-2 sm:gap-4">
                   <div
                     className="text-xs sm:text-sm text-muted-foreground hidden sm:block"
