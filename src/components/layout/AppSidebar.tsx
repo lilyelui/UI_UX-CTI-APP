@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "../ui/utils";
-
+import { ChevronRight } from "lucide-react";
 import {
   Shield,
   LayoutDashboard,
@@ -47,6 +47,25 @@ export function AppSidebar({
     user?.email?.split("@")[0] ||
     "User";
 
+  const [showFloatingMenu, setShowFloatingMenu] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const isScrolled = window.scrollY > 300;
+
+      setShowFloatingMenu(isScrolled);
+
+      if (isScrolled && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [sidebarOpen, setSidebarOpen]);
   const displayInitial =
     displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
 
@@ -92,16 +111,30 @@ export function AppSidebar({
       )}
 
       {/* Hamburger Button */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-lg shadow-md transition-all"
-        style={{
-          backgroundColor: "var(--sidebar-primary)",
-          color: "var(--sidebar-primary-foreground)",
-        }}
-      >
-        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
+      {showFloatingMenu && !sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="
+      fixed
+      left-0
+      top-1/2
+      -translate-y-1/2
+      z-50
+      w-14
+      h-24
+      rounded-r-full
+      shadow-xl
+      transition-all
+      duration-300
+    "
+          style={{
+            backgroundColor: "#e5e7eb",
+            color: "#111827",
+          }}
+        >
+          <ChevronRight className="w-8 h-8 mx-auto" />
+        </button>
+      )}
 
       {/* Sidebar */}
       <aside
