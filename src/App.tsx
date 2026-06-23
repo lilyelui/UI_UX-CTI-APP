@@ -274,19 +274,6 @@ export default function App() {
                   )}
                 </Button>
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="hidden md:flex"
-                >
-                  {sidebarOpen ? (
-                    <X className="h-5 w-5" />
-                  ) : (
-                    <Menu className="h-5 w-5" />
-                  )}
-                </Button>
-
                 <div className="flex items-center gap-2 sm:gap-4">
                   <div
                     className="text-xs sm:text-sm text-muted-foreground hidden sm:block"

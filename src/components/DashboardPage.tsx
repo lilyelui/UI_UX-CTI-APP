@@ -2353,42 +2353,109 @@ ${JSON.stringify(result.abuseData, null, 2)}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm">
+                <div
+                  className="prose prose-sm max-w-none bg-slate-50 dark:bg-slate-900 p-3 sm:p-4 rounded-lg text-xs sm:text-sm overflow-hidden"
+                  style={{
+                    wordBreak: "break-word",
+                    overflowWrap: "anywhere",
+                  }}
+                >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
                       table: ({ children }) => (
-                        <div className="overflow-x-auto my-4">
+                        <div className="overflow-x-auto my-4 w-full">
                           <table className="w-full text-xs border border-gray-300 rounded-md">
                             {children}
                           </table>
                         </div>
                       ),
+
                       thead: ({ children }) => (
                         <thead className="bg-gray-100 text-gray-700">
                           {children}
                         </thead>
                       ),
+
                       tbody: ({ children }) => (
                         <tbody className="divide-y">{children}</tbody>
                       ),
+
                       tr: ({ children }) => (
                         <tr className="hover:bg-gray-50">{children}</tr>
                       ),
+
                       th: ({ children }) => (
-                        <th className="px-3 py-2 text-left font-semibold border">
+                        <th className="px-3 py-2 text-left font-semibold border break-words">
                           {children}
                         </th>
                       ),
+
                       td: ({ children }) => (
-                        <td className="px-3 py-2 border text-gray-700">
+                        <td
+                          className="px-3 py-2 border text-gray-700"
+                          style={{
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
                           {children}
                         </td>
+                      ),
+
+                      p: ({ children }) => (
+                        <p
+                          style={{
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {children}
+                        </p>
+                      ),
+
+                      a: ({ href, children }) => (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            wordBreak: "break-all",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {children}
+                        </a>
+                      ),
+
+                      code: ({ children }) => (
+                        <code
+                          style={{
+                            wordBreak: "break-all",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {children}
+                        </code>
+                      ),
+
+                      pre: ({ children }) => (
+                        <pre
+                          className="overflow-x-auto"
+                          style={{
+                            maxWidth: "100%",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {children}
+                        </pre>
                       ),
                     }}
                   >
                     {typedAiAnalysis}
-                  </ReactMarkdown>{" "}
+                  </ReactMarkdown>
+
                   {isTypingAi && <span className="ai-typing-cursor" />}
                 </div>
               </CardContent>

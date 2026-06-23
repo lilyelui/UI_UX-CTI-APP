@@ -2634,3 +2634,56 @@ html {
     opacity: 1;
   }
 }
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Mencegah URL panjang membuat halaman melebar */
+p,
+span,
+div,
+a,
+code,
+pre {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Semua gambar dan media tidak boleh melebihi layar */
+img,
+svg,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+  height: auto;
+}
+html,
+body,
+#root {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+.prose {
+  max-width: 100%;
+}
+
+.prose p,
+.prose li,
+.prose span,
+.prose a,
+.prose code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.prose table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+}

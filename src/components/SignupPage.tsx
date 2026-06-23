@@ -64,7 +64,9 @@ export function SignupPage({
         return;
       }
 
-      toast.success("Account created successfully! Please sign in.");
+      toast.success(
+        "Account created successfully! Registration successful! Please check your email to verify your account before signing in.",
+      );
       onSignupSuccess();
     } catch (error) {
       console.error("Signup processing error:", error);
