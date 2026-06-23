@@ -2363,6 +2363,23 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
+                      h1: ({ children }) => (
+                        <h1 className="text-3xl font-bold mt-6 mb-4 border-b pb-2">
+                          {children}
+                        </h1>
+                      ),
+
+                      h2: ({ children }) => (
+                        <h2 className="text-2xl font-bold mt-6 mb-3 text-slate-900 dark:text-white border-b pb-2">
+                          {children}
+                        </h2>
+                      ),
+
+                      h3: ({ children }) => (
+                        <h3 className="text-xl font-semibold mt-4 mb-2 text-slate-800 dark:text-slate-200">
+                          {children}
+                        </h3>
+                      ),
                       table: ({ children }) => (
                         <div className="overflow-x-auto my-4 w-full">
                           <table className="w-full text-xs border border-gray-300 rounded-md">
@@ -2455,7 +2472,6 @@ ${JSON.stringify(result.abuseData, null, 2)}
                   >
                     {typedAiAnalysis}
                   </ReactMarkdown>
-
                   {isTypingAi && <span className="ai-typing-cursor" />}
                 </div>
               </CardContent>

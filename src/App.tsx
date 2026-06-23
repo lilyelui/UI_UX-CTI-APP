@@ -205,7 +205,7 @@ export default function App() {
   =========================================== */
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex items-center justify-center bg-background">
         <div className="flex flex-col items-center justify-center gap-4">
           <div className="cyber-loading-spinner" />
 
@@ -236,7 +236,7 @@ export default function App() {
 
   return (
     <>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-dvh bg-background flex flex-col">
         {/* SIDEBAR */}
         {showSidebar && (
           <AppSidebar
@@ -252,9 +252,9 @@ export default function App() {
         {/* CONTENT */}
         <div
           className={
-            showSidebar && sidebarOpen
+            (showSidebar && sidebarOpen
               ? "md:ml-64 transition-all duration-300"
-              : "md:ml-0 transition-all duration-300"
+              : "md:ml-0 transition-all duration-300") + " flex flex-col flex-1"
           }
         >
           {/* Header */}
